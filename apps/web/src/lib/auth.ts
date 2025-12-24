@@ -6,7 +6,28 @@ import MicrosoftProvider from 'next-auth/providers/microsoft'
 import axios from 'axios'
 
 // Use internal API URL for server-side calls in Docker, fallback to public URL
-const API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const getApiUrl = () => {
+  const internalUrl = process.env.INTERNAL_API_URL
+  const publicUrl = process.env.NEXT_PUBLIC_API_URL
+  const fallbackUrl = 'http://localhost:8000'
+  
+  // Prefer internal URL for server-side calls within Docker
+  const apiUrl = internalUrl || publicUrl || fallbackUrl
+  
+  // Log for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Auth] API URL Configuration:', {
+      internal: internalUrl,
+      public: publicUrl,
+      using: apiUrl,
+      env: process.env.NODE_ENV
+    })
+  }
+  
+  return apiUrl
+}
+
+const API_URL = getApiUrl()
 
 export const authOptions: NextAuthOptions = {
   providers: [

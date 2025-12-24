@@ -152,8 +152,8 @@ class OrgMember(Base, TimestampMixin):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.VIEWER)
-    status = Column(Enum(OrgMemberStatus), nullable=False, default=OrgMemberStatus.INVITED)
+    role = Column(Enum(UserRole, values_callable=lambda x: [e.value for e in x]), nullable=False, default=UserRole.VIEWER)
+    status = Column(Enum(OrgMemberStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=OrgMemberStatus.INVITED)
     
     # For invitations
     invited_email = Column(String(255), nullable=True)
@@ -202,7 +202,7 @@ class Submission(Base, TimestampMixin, SoftDeleteMixin):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     version = Column(String(50), nullable=True)
-    status = Column(Enum(SubmissionStatus), nullable=False, default=SubmissionStatus.DRAFT)
+    status = Column(Enum(SubmissionStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=SubmissionStatus.DRAFT)
     
     # Extracted profile (populated by analysis)
     profile = Column(JSONB, nullable=True)  # SubmissionProfile JSON
@@ -264,7 +264,7 @@ class KnowledgeSource(Base, TimestampMixin, SoftDeleteMixin):
     storage_key = Column(String(500), nullable=False)
     source_url = Column(String(1000), nullable=True)
     
-    status = Column(Enum(KBSourceStatus), nullable=False, default=KBSourceStatus.UPLOADED)
+    status = Column(Enum(KBSourceStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=KBSourceStatus.UPLOADED)
     
     uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
@@ -309,7 +309,7 @@ class AnalysisRun(Base, TimestampMixin):
     submission_id = Column(UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, index=True)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     
-    status = Column(Enum(AnalysisRunStatus), nullable=False, default=AnalysisRunStatus.PENDING)
+    status = Column(Enum(AnalysisRunStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=AnalysisRunStatus.PENDING)
     
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
@@ -343,8 +343,8 @@ class Finding(Base, TimestampMixin):
     analysis_run_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False, index=True)
     
     category = Column(String(100), nullable=False, index=True)
-    severity = Column(Enum(FindingSeverity), nullable=False, index=True)
-    status = Column(Enum(FindingStatus), nullable=False, default=FindingStatus.PENDING, index=True)
+    severity = Column(Enum(FindingSeverity, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
+    status = Column(Enum(FindingStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=FindingStatus.PENDING, index=True)
     
     statement = Column(Text, nullable=False)
     confidence = Column(Float, nullable=False)
@@ -369,7 +369,7 @@ class FindingFeedback(Base, TimestampMixin):
     finding_id = Column(UUID(as_uuid=True), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False, index=True)
     reviewer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
-    action = Column(Enum(FeedbackAction), nullable=False)
+    action = Column(Enum(FeedbackAction, values_callable=lambda x: [e.value for e in x]), nullable=False)
     final_statement = Column(Text, nullable=True)
     reason_code = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
@@ -392,7 +392,7 @@ class Ruleset(Base, TimestampMixin):
     name = Column(String(255), nullable=False)
     jurisdiction = Column(String(100), nullable=True, index=True)
     version = Column(String(50), nullable=False)
-    status = Column(Enum(RulesetStatus), nullable=False, default=RulesetStatus.DRAFT)
+    status = Column(Enum(RulesetStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=RulesetStatus.DRAFT)
     
     rules = Column(JSONB, nullable=False)
     
@@ -435,7 +435,7 @@ class Subscription(Base, TimestampMixin):
     
     provider = Column(String(50), nullable=False, default="mock")
     plan = Column(String(50), nullable=False, default="trial")
-    status = Column(Enum(SubscriptionStatus), nullable=False, default=SubscriptionStatus.TRIAL)
+    status = Column(Enum(SubscriptionStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=SubscriptionStatus.TRIAL)
     
     trial_ends_at = Column(DateTime(timezone=True), nullable=True)
     current_period_start = Column(DateTime(timezone=True), nullable=True)

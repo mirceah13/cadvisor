@@ -44,10 +44,10 @@ def get_db() -> Generator[Session, None, None]:
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
     """Enable foreign key support for SQLite"""
-    cursor = dbapi_conn.cursor()
-    try:
-        cursor.execute("PRAGMA foreign_keys=ON")
-    except:
-        pass
-    finally:
-        cursor.close()
+    # Only execute for SQLite databases
+    if engine.dialect.name == 'sqlite':
+        cursor = dbapi_conn.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cursor.close()

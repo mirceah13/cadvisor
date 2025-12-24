@@ -64,8 +64,8 @@ def seed_database():
             id=uuid.uuid4(),
             org_id=demo_org.id,
             user_id=demo_user.id,
-            role=UserRole.OWNER,
-            status=OrgMemberStatus.ACTIVE,
+            role=UserRole.OWNER.value,
+            status=OrgMemberStatus.ACTIVE.value,
         )
         db.add(membership)
         logger.info("Added user as owner of demo organization")
@@ -76,7 +76,7 @@ def seed_database():
             org_id=demo_org.id,
             provider="mock",
             plan="trial",
-            status=SubscriptionStatus.TRIAL,
+            status=SubscriptionStatus.TRIAL.value,
             trial_ends_at=datetime.utcnow() + timedelta(days=14),
             limits={
                 "max_projects": 3,

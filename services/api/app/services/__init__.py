@@ -4,6 +4,8 @@ from .file import FileService
 from .knowledge_base import KnowledgeBaseService
 from .embeddings import EmbeddingService
 from .chunking import ChunkingService, ChunkingStrategy
+from .llm import LLMService
+from .analysis import AnalysisEngine
 
 __all__ = [
     "StorageService",
@@ -11,5 +13,7 @@ __all__ = [
     "KnowledgeBaseService",
     "EmbeddingService",
     "ChunkingService",
-    "ChunkingStrategy"
+    "ChunkingStrategy",
+    "LLMService",
+    "AnalysisEngine"
 ]

@@ -28,15 +28,15 @@ def seed_database():
         logger.info("Starting database seeding...")
         
         # Check if demo user exists
-        existing_user = db.query(User).filter(User.email == "admin@buildguard.local").first()
+        existing_user = db.query(User).filter(User.email == "admin@cadvisor.local").first()
         if existing_user:
             logger.info("Demo data already exists. Skipping seed.")
             return
         
         # Create demo user
         demo_user = User(
-            email="admin@buildguard.local",
-            password_hash=get_password_hash("BuildGuard2025!"),
+            email="admin@cadvisor.local",
+            password_hash=get_password_hash("CADVisor2025!"),
             name="Demo Admin",
             is_active=True,
             is_superuser=False,
@@ -50,7 +50,7 @@ def seed_database():
         demo_org = Organization(
             name="Demo Construction Company",
             slug="demo-construction",
-            description="Demo organization for testing BuildGuard Advisor",
+            description="Demo organization for testing CADVisor",
         )
         db.add(demo_org)
         db.flush()

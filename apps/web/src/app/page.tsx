@@ -8,7 +8,7 @@ export default function Home() {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">BuildGuard Advisor</h1>
+            <h1 className="text-2xl font-bold">CADVisor</h1>
           </div>
           <nav className="flex items-center gap-4">
             <Link href="/login">
@@ -29,7 +29,7 @@ export default function Home() {
               Validate Building Submissions with AI
             </h2>
             <p className="mt-6 text-lg leading-8 text-muted-foreground">
-              BuildGuard Advisor helps construction companies validate building submission 
+              CADVisor helps construction companies validate building submission 
               packages against standards, legal norms, and internal guidelines using AI-powered 
               analysis and human-in-the-loop review.
             </p>
@@ -108,7 +108,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t py-8">
         <div className="container text-center text-sm text-muted-foreground">
-          <p>&copy; 2025 BuildGuard Advisor. All rights reserved.</p>
+          <p>&copy; 2025 CADVisor. All rights reserved.</p>
         </div>
       </footer>
     </div>

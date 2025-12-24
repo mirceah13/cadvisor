@@ -1,4 +1,4 @@
-# BuildGuard Advisor
+# CADVisor
 
 ![License](https://img.shields.io/badge/license-Proprietary-red)
 ![Python](https://img.shields.io/badge/python-3.11-blue)

@@ -99,7 +99,7 @@ docker push registry.example.com/buildguard/web:1.0.0
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: buildguard
+  name: cadvisor
 ```
 
 ### 2. Secrets

@@ -1,8 +1,8 @@
-# BuildGuard Advisor
+# CADVisor
 
 **Production-Ready MVP** - SaaS platform for validating building submission packages against standards and regulations.
 
-⚠️ **IMPORTANT DISCLAIMER**: BuildGuard Advisor provides decision-support suggestions and does not replace certified engineering or legal review. This system is not a legal authority or certified compliance body.
+⚠️ **IMPORTANT DISCLAIMER**: CADVisor provides decision-support suggestions and does not replace certified engineering or legal review. This system is not a legal authority or certified compliance body.
 
 ## Features
 
@@ -37,7 +37,7 @@
 
 ```powershell
 git clone <repo-url>
-cd CADVISOR
+cd CADVisor
 cp .env.example .env
 ```
 
@@ -452,4 +452,4 @@ Proprietary - All rights reserved
 
 ---
 
-Built with ❤️ for the construction industry
+Built with ❤️ for the construction industry by CADVisor

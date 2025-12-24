@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     """Application settings"""
     
     # Application
-    APP_NAME: str = "BuildGuard Advisor"
+    APP_NAME: str = "CADVisor"
     ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
     DEBUG: bool = Field(default=True, env="DEBUG")
     LOG_LEVEL: str = Field(default="info", env="LOG_LEVEL")

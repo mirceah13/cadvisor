@@ -1,6 +1,6 @@
-# BuildGuard Advisor - Implementation Guide
+# CADVisor - Implementation Guide
 
-This document provides a comprehensive guide for completing the remaining implementation tasks for BuildGuard Advisor MVP.
+This document provides a comprehensive guide for completing the remaining implementation tasks for CADVisor MVP.
 
 ## Project Status
 

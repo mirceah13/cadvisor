@@ -1,8 +1,8 @@
-# BuildGuard Advisor - Project Summary
+# CADVisor - Project Summary
 
 ## Overview
 
-**BuildGuard Advisor** is a production-ready SaaS MVP for validating building submission packages (CAD + documentation) against regulatory standards and internal guidelines. The platform combines AI-powered analysis with human-in-the-loop review to provide compliance checking for construction companies.
+**CADVisor** is a production-ready SaaS MVP for validating building submission packages (CAD + documentation) against regulatory standards and internal guidelines. The platform combines AI-powered analysis with human-in-the-loop review to provide compliance checking for construction companies.
 
 ## Architecture
 

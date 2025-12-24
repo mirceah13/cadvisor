@@ -4,11 +4,11 @@ services:
   # PostgreSQL with pgvector
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: buildguard-postgres
+    container_name: cadvisor-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-buildguard}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buildguard_secure_password}
-      POSTGRES_DB: ${POSTGRES_DB:-buildguard}
+      POSTGRES_USER: ${POSTGRES_USER:-cadvisor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cadvisor_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cadvisor}
       POSTGRES_INITDB_ARGS: "-E UTF8"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -16,7 +16,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buildguard}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cadvisor}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,7 +26,7 @@ services:
   # Redis
   redis:
     image: redis:7-alpine
-    container_name: buildguard-redis
+    container_name: cadvisor-redis
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -43,7 +43,7 @@ services:
   # MinIO (S3-compatible storage)
   minio:
     image: minio/minio:latest
-    container_name: buildguard-minio
+    container_name: cadvisor-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -64,15 +64,15 @@ services:
   # MinIO Client - Create bucket on startup
   minio-init:
     image: minio/mc:latest
-    container_name: buildguard-minio-init
+    container_name: cadvisor-minio-init
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin_change_in_prod};
-      mc mb myminio/${MINIO_BUCKET_NAME:-buildguard-files} --ignore-existing;
-      mc anonymous set download myminio/${MINIO_BUCKET_NAME:-buildguard-files};
+      mc mb myminio/${MINIO_BUCKET_NAME:-cadvisor-files} --ignore-existing;
+      mc anonymous set download myminio/${MINIO_BUCKET_NAME:-cadvisor-files};
       exit 0;
       "
     networks:
@@ -81,7 +81,7 @@ services:
   # Ollama (Local LLM inference)
   ollama:
     image: ollama/ollama:latest
-    container_name: buildguard-ollama
+    container_name: cadvisor-ollama
     environment:
       OLLAMA_HOST: ${OLLAMA_HOST:-0.0.0.0:11434}
       OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
@@ -112,7 +112,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
-    container_name: buildguard-api
+    container_name: cadvisor-api
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
@@ -157,7 +157,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/ai.Dockerfile
-    container_name: buildguard-ai
+    container_name: cadvisor-ai
     environment:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
       - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL}
@@ -195,7 +195,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
-    container_name: buildguard-celery-worker
+    container_name: cadvisor-celery-worker
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
@@ -227,7 +227,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
-    container_name: buildguard-celery-beat
+    container_name: cadvisor-celery-beat
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
@@ -252,7 +252,7 @@ services:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
         - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
         - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
-    container_name: buildguard-web
+    container_name: cadvisor-web
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
@@ -282,5 +282,5 @@ volumes:
   celery_temp:
 
 networks:
-  buildguard-network:
+  cadvisor-network:
     driver: bridge

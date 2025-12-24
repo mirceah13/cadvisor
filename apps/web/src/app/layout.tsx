@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'BuildGuard Advisor',
+  title: 'CADVisor',
   description: 'Building submission validation and compliance checking platform',
 }
 

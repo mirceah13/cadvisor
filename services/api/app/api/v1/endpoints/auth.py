@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timedelta
 from typing import Optional
 import logging
+from slugify import slugify
 
 from app.core.database import get_db
 from app.core.security import (
@@ -16,7 +17,7 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
 )
-from app.models import User, Organization
+from app.models import User, Organization, Subscription, SubscriptionStatus, OrgMember, OrgMemberStatus, UserRole
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -62,27 +63,51 @@ async def register(request: SignupRequest, db: Session = Depends(get_db)):
             detail="Email already registered",
         )
     
-    # Create organization
+    # Create organization with slug
     organization = Organization(
         name=request.organization_name,
-        subscription_tier="trial",
-        subscription_status="active",
-        trial_start=datetime.utcnow(),
-        trial_end=datetime.utcnow() + timedelta(days=14),
+        slug=slugify(request.organization_name),
     )
     db.add(organization)
+    db.flush()
+    
+    # Create trial subscription
+    subscription = Subscription(
+        org_id=organization.id,
+        provider="trial",
+        plan="trial",
+        status=SubscriptionStatus.TRIAL,
+        trial_ends_at=datetime.utcnow() + timedelta(days=14),
+        limits={
+            "max_projects": 3,
+            "max_submissions_per_month": 10,
+            "max_users": 3,
+            "max_storage_gb": 5
+        }
+    )
+    db.add(subscription)
     db.flush()
     
     # Create user
     user = User(
         email=request.email,
-        hashed_password=get_password_hash(request.password),
-        full_name=request.full_name,
-        organization_id=organization.id,
-        role="admin",  # First user is admin
+        password_hash=get_password_hash(request.password),
+        name=request.full_name,
         is_active=True,
+        email_verified=False,
     )
     db.add(user)
+    db.flush()
+    
+    # Create org membership
+    org_member = OrgMember(
+        org_id=organization.id,
+        user_id=user.id,
+        role=UserRole.ADMIN,
+        status=OrgMemberStatus.ACTIVE,
+    )
+    db.add(org_member)
+    
     db.commit()
     db.refresh(user)
     
@@ -92,19 +117,19 @@ async def register(request: SignupRequest, db: Session = Depends(get_db)):
     access_token = create_access_token(
         data={
             "sub": user.email,
-            "user_id": user.id,
-            "org_id": user.organization_id
+            "user_id": str(user.id),
+            "org_id": str(organization.id)
         }
     )
     
     return TokenResponse(
         access_token=access_token,
         user={
-            "id": user.id,
+            "id": str(user.id),
             "email": user.email,
-            "full_name": user.full_name,
-            "organization_id": user.organization_id,
-            "role": user.role,
+            "name": user.name,
+            "organization_id": str(organization.id),
+            "role": org_member.role.value,
         },
     )
 

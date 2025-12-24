@@ -41,6 +41,7 @@ python-dateutil==2.8.2
 # Utilities
 pyyaml==6.0.1
 ujson==5.9.0
+python-slugify==8.0.1
 
 # CAD/BIM Parsing
 ifcopenshell==0.8.1

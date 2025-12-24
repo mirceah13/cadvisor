@@ -5,7 +5,8 @@ import AppleProvider from 'next-auth/providers/apple'
 import MicrosoftProvider from 'next-auth/providers/microsoft'
 import axios from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Use internal API URL for server-side calls in Docker, fallback to public URL
+const API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export const authOptions: NextAuthOptions = {
   providers: [

@@ -11,10 +11,10 @@ export default function Home() {
             <h1 className="text-2xl font-bold">CADVisor</h1>
           </div>
           <nav className="flex items-center gap-4">
-            <Link href="/login">
+            <Link href="/auth/login">
               <Button variant="ghost">Login</Button>
             </Link>
-            <Link href="/signup">
+            <Link href="/auth/signup">
               <Button>Sign Up</Button>
             </Link>
           </nav>
@@ -34,7 +34,7 @@ export default function Home() {
               analysis and human-in-the-loop review.
             </p>
             <div className="mt-10 flex items-center justify-center gap-4">
-              <Link href="/signup">
+              <Link href="/auth/signup">
                 <Button size="lg">Start Free Trial</Button>
               </Link>
               <Link href="/docs">

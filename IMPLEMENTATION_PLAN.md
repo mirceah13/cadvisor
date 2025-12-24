@@ -47,31 +47,31 @@ DELETE /api/v1/files/{id}
 **Priority: HIGH - Core differentiation**
 
 #### 2.1 IFC Parser Implementation
-- [ ] Install & configure IfcOpenShell
-- [ ] Extract building structure (storeys, spaces, zones)
-- [ ] Extract elements (walls, doors, windows, stairs)
-- [ ] Extract properties & quantities
-- [ ] Calculate basic metrics (area, volume, counts)
-- [ ] Generate SubmissionProfile JSON schema
+- [x] Install & configure IfcOpenShell
+- [x] Extract building structure (storeys, spaces, zones)
+- [x] Extract elements (walls, doors, windows, stairs)
+- [x] Extract properties & quantities
+- [x] Calculate basic metrics (area, volume, counts)
+- [x] Generate SubmissionProfile JSON schema
 
 #### 2.2 DXF Parser Implementation
-- [ ] Install & configure ezdxf
-- [ ] Extract layers & blocks
-- [ ] Parse dimensions & annotations
-- [ ] Extract text entities
-- [ ] Detect keywords in labels
-- [ ] Generate DXF metadata summary
+- [x] Install & configure ezdxf
+- [x] Extract layers & blocks
+- [x] Parse dimensions & annotations
+- [x] Extract text entities
+- [x] Detect keywords in labels
+- [x] Generate DXF metadata summary
 
 #### 2.3 Document Parsers
-- [ ] PDF text extraction (PyPDF2/pdfplumber)
-- [ ] DOCX parsing (python-docx)
+- [x] PDF text extraction (PyPDF2/pdfplumber)
+- [x] DOCX parsing (python-docx)
 - [ ] OCR integration stub (Tesseract)
 - [ ] Markdown parser
 
 **Celery Tasks:**
 ```
-process_cad_file(file_id)
-extract_submission_profile(submission_id)
+process_cad_file(file_id) ✓
+extract_submission_profile(submission_id) ✓
 ```
 
 **Data Structure:**

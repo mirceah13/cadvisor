@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import User
 from app.services.file import FileService
+from app.tasks.cad import process_cad_file
 
 router = APIRouter()
 
@@ -144,8 +145,17 @@ def complete_upload(
         sha256=request.sha256
     )
     
-    # TODO: Trigger background scan job
-    # TODO: If CAD file, trigger extraction
+    # Trigger background processing for CAD files
+    if _is_cad_file(request.mime_type, request.filename):
+        try:
+            task = process_cad_file.delay(str(file_record.id))
+            # Store task ID in metadata for tracking
+            file_record.metadata = file_record.metadata or {}
+            file_record.metadata["processing_task_id"] = task.id
+            db.commit()
+        except Exception as e:
+            # Log error but don't fail upload
+            print(f"Failed to queue CAD processing task: {e}")
     
     return FileResponse(
         id=file_record.id,
@@ -280,3 +290,16 @@ def delete_file(
     
     return {"message": "File deleted successfully"}
 
+
+def _is_cad_file(mime_type: str, filename: str) -> bool:
+    """Check if file is a CAD file that needs processing"""
+    cad_extensions = ['.ifc', '.dxf', '.dwg']
+    cad_mime_types = ['ifc', 'dxf', 'dwg']
+    
+    filename_lower = filename.lower()
+    mime_lower = mime_type.lower()
+    
+    return (
+        any(filename_lower.endswith(ext) for ext in cad_extensions) or
+        any(mime in mime_lower for mime in cad_mime_types)
+    )

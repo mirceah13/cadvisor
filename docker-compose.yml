@@ -1,0 +1,286 @@
+version: '3.9'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: buildguard-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buildguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buildguard_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-buildguard}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buildguard}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buildguard-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: buildguard-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buildguard-network
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: buildguard-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_change_in_prod}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - buildguard-network
+
+  # MinIO Client - Create bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: buildguard-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin_change_in_prod};
+      mc mb myminio/${MINIO_BUCKET_NAME:-buildguard-files} --ignore-existing;
+      mc anonymous set download myminio/${MINIO_BUCKET_NAME:-buildguard-files};
+      exit 0;
+      "
+    networks:
+      - buildguard-network
+
+  # Ollama (Local LLM inference)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: buildguard-ollama
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST:-0.0.0.0:11434}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # Remove GPU section if no NVIDIA GPU available
+    # For CPU-only, comment out the deploy section
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - buildguard-network
+
+  # API Service (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: buildguard-api
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+      - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
+      - ./services/api:/app
+      - api_uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      sh -c "
+      alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - buildguard-network
+
+  # AI Service (FastAPI + Ollama integration)
+  ai:
+    build:
+      context: .
+      dockerfile: infra/docker/ai.Dockerfile
+    container_name: buildguard-ai
+    environment:
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL}
+      - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1000}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-200}
+      - RAG_TOP_K=${RAG_TOP_K:-10}
+      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-768}
+    volumes:
+      - ./services/ai:/app
+      - ai_temp:/app/temp
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - buildguard-network
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: buildguard-celery-worker
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./services/api:/app
+      - celery_temp:/app/temp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKERS:-4}
+    networks:
+      - buildguard-network
+
+  # Celery Beat (Scheduled tasks)
+  celery-beat:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: buildguard-celery-beat
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./services/api:/app
+    depends_on:
+      - redis
+      - celery-worker
+    command: celery -A app.worker.celery_app beat --loglevel=info
+    networks:
+      - buildguard-network
+
+  # Web Frontend (Next.js)
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
+        - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+    container_name: buildguard-web
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - NEXT_PUBLIC_MAX_FILE_SIZE_MB=${NEXT_PUBLIC_MAX_FILE_SIZE_MB}
+      - NODE_ENV=${NODE_ENV:-development}
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: npm run dev
+    networks:
+      - buildguard-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  ollama_data:
+  api_uploads:
+  ai_temp:
+  celery_temp:
+
+networks:
+  buildguard-network:
+    driver: bridge

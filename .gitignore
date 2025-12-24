@@ -1,0 +1,92 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.pid
+*.seed
+
+# Testing
+coverage/
+.coverage
+.nyc_output
+
+# Database
+*.db
+*.sqlite
+
+# MinIO data
+data/minio/
+
+# Postgres data
+data/postgres/
+
+# Redis data
+data/redis/
+
+# Uploads (local dev)
+uploads/
+temp/
+
+# Reports
+reports/
+
+# Secrets
+secrets/
+*.pem
+*.key
+*.crt
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Alembic
+alembic/versions/*.pyc
+
+# Docker
+docker-compose.override.yml
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/

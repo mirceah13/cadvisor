@@ -1,0 +1,124 @@
+"""
+Configuration Settings
+"""
+from typing import List, Optional
+from pydantic_settings import BaseSettings
+from pydantic import Field, validator
+import os
+
+
+class Settings(BaseSettings):
+    """Application settings"""
+    
+    # Application
+    APP_NAME: str = "BuildGuard Advisor"
+    ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
+    DEBUG: bool = Field(default=True, env="DEBUG")
+    LOG_LEVEL: str = Field(default="info", env="LOG_LEVEL")
+    
+    # API
+    API_HOST: str = Field(default="0.0.0.0", env="API_HOST")
+    API_PORT: int = Field(default=8000, env="API_PORT")
+    API_WORKERS: int = Field(default=4, env="API_WORKERS")
+    
+    # Database
+    DATABASE_URL: str = Field(..., env="DATABASE_URL")
+    DB_POOL_SIZE: int = Field(default=20, env="DB_POOL_SIZE")
+    DB_MAX_OVERFLOW: int = Field(default=40, env="DB_MAX_OVERFLOW")
+    
+    # Redis
+    REDIS_URL: str = Field(..., env="REDIS_URL")
+    
+    # Security
+    JWT_SECRET: str = Field(..., env="JWT_SECRET")
+    JWT_ALGORITHM: str = Field(default="HS256", env="JWT_ALGORITHM")
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, env="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
+    
+    SESSION_SECRET: str = Field(..., env="SESSION_SECRET")
+    
+    # Password hashing (Argon2)
+    PASSWORD_HASH_TIME_COST: int = Field(default=2, env="PASSWORD_HASH_TIME_COST")
+    PASSWORD_HASH_MEMORY_COST: int = Field(default=65536, env="PASSWORD_HASH_MEMORY_COST")
+    PASSWORD_HASH_PARALLELISM: int = Field(default=4, env="PASSWORD_HASH_PARALLELISM")
+    
+    # CORS
+    CORS_ORIGINS: List[str] = Field(
+        default=["http://localhost:3000"],
+        env="CORS_ORIGINS"
+    )
+    CORS_CREDENTIALS: bool = Field(default=True, env="CORS_CREDENTIALS")
+    
+    # Trusted hosts (production)
+    ALLOWED_HOSTS: List[str] = Field(default=["*"], env="ALLOWED_HOSTS")
+    
+    # Rate limiting
+    RATE_LIMIT_AUTH_PER_MINUTE: int = Field(default=5, env="RATE_LIMIT_AUTH_PER_MINUTE")
+    RATE_LIMIT_API_PER_MINUTE: int = Field(default=100, env="RATE_LIMIT_API_PER_MINUTE")
+    
+    # MinIO/S3 Storage
+    MINIO_ENDPOINT: str = Field(..., env="MINIO_ENDPOINT")
+    MINIO_EXTERNAL_ENDPOINT: str = Field(default="localhost:9000", env="MINIO_EXTERNAL_ENDPOINT")
+    MINIO_ROOT_USER: str = Field(..., env="MINIO_ROOT_USER")
+    MINIO_ROOT_PASSWORD: str = Field(..., env="MINIO_ROOT_PASSWORD")
+    MINIO_USE_SSL: bool = Field(default=False, env="MINIO_USE_SSL")
+    MINIO_BUCKET_NAME: str = Field(default="buildguard-files", env="MINIO_BUCKET_NAME")
+    MINIO_REGION: str = Field(default="us-east-1", env="MINIO_REGION")
+    
+    # File processing
+    MAX_UPLOAD_SIZE_BYTES: int = Field(default=2147483648, env="MAX_UPLOAD_SIZE_BYTES")  # 2GB
+    PRESIGNED_URL_EXPIRY: int = Field(default=900, env="PRESIGNED_URL_EXPIRY")  # 15 minutes
+    ALLOWED_MIME_TYPES: str = Field(
+        default="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/png,image/jpeg,application/ifc,image/vnd.dxf,application/dxf",
+        env="ALLOWED_MIME_TYPES"
+    )
+    
+    # File scanning
+    ENABLE_FILE_SCANNING: bool = Field(default=False, env="ENABLE_FILE_SCANNING")
+    CLAMAV_HOST: str = Field(default="clamav", env="CLAMAV_HOST")
+    CLAMAV_PORT: int = Field(default=3310, env="CLAMAV_PORT")
+    
+    # AI Service
+    AI_SERVICE_BASE_URL: str = Field(..., env="AI_SERVICE_BASE_URL")
+    
+    # Celery
+    CELERY_BROKER_URL: str = Field(..., env="CELERY_BROKER_URL")
+    CELERY_RESULT_BACKEND: str = Field(..., env="CELERY_RESULT_BACKEND")
+    
+    # Billing
+    BILLING_PROVIDER: str = Field(default="mock", env="BILLING_PROVIDER")
+    STRIPE_SECRET_KEY: Optional[str] = Field(default=None, env="STRIPE_SECRET_KEY")
+    STRIPE_WEBHOOK_SECRET: Optional[str] = Field(default=None, env="STRIPE_WEBHOOK_SECRET")
+    DEFAULT_TRIAL_DAYS: int = Field(default=14, env="DEFAULT_TRIAL_DAYS")
+    
+    # Email
+    ENABLE_EMAIL_VERIFICATION: bool = Field(default=False, env="ENABLE_EMAIL_VERIFICATION")
+    SMTP_HOST: Optional[str] = Field(default=None, env="SMTP_HOST")
+    SMTP_PORT: int = Field(default=587, env="SMTP_PORT")
+    SMTP_USER: Optional[str] = Field(default=None, env="SMTP_USER")
+    SMTP_PASSWORD: Optional[str] = Field(default=None, env="SMTP_PASSWORD")
+    SMTP_FROM_EMAIL: str = Field(default="noreply@buildguard.example", env="SMTP_FROM_EMAIL")
+    
+    # Data retention
+    SOFT_DELETE_RETENTION_DAYS: int = Field(default=90, env="SOFT_DELETE_RETENTION_DAYS")
+    AUDIT_LOG_RETENTION_DAYS: int = Field(default=365, env="AUDIT_LOG_RETENTION_DAYS")
+    
+    @validator("CORS_ORIGINS", pre=True)
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+    
+    @validator("ALLOWED_MIME_TYPES", pre=True)
+    def parse_mime_types(cls, v):
+        if isinstance(v, str):
+            return v
+        return ",".join(v)
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+
+# Create settings instance
+settings = Settings()

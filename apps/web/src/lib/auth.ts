@@ -6,6 +6,7 @@ import MicrosoftProvider from 'next-auth/providers/microsoft'
 import axios from 'axios'
 
 // Use internal API URL for server-side calls in Docker, fallback to public URL
+// This MUST be a function, not a constant, to read env vars at runtime
 const getApiUrl = () => {
   const internalUrl = process.env.INTERNAL_API_URL
   const publicUrl = process.env.NEXT_PUBLIC_API_URL
@@ -27,8 +28,6 @@ const getApiUrl = () => {
   return apiUrl
 }
 
-const API_URL = getApiUrl()
-
 export const authOptions: NextAuthOptions = {
   providers: [
     // Email/Password Provider
@@ -44,8 +43,9 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Call backend API to authenticate
-          const response = await axios.post(`${API_URL}/api/v1/auth/login`, {
+          // Call backend API to authenticate - get URL dynamically
+          const apiUrl = getApiUrl()
+          const response = await axios.post(`${apiUrl}/api/v1/auth/login`, {
             email: credentials.email,
             password: credentials.password
           })
@@ -115,7 +115,8 @@ export const authOptions: NextAuthOptions = {
       // OAuth sign in - exchange OAuth token for backend token
       if (account && account.provider !== 'credentials') {
         try {
-          const response = await axios.post(`${API_URL}/api/v1/auth/oauth/${account.provider}`, {
+          const apiUrl = getApiUrl()
+          const response = await axios.post(`${apiUrl}/api/v1/auth/oauth/${account.provider}`, {
             access_token: account.access_token,
             id_token: account.id_token,
             provider: account.provider

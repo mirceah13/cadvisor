@@ -82,21 +82,20 @@ async def add_request_id_and_timing(request: Request, call_next):
     
     start_time = time.time()
     
-    # Add request ID to logger context
-    with logger.contextvars.bind(request_id=request_id):
-        logger.info(f"{request.method} {request.url.path}")
-        
-        response = await call_next(request)
-        
-        process_time = time.time() - start_time
-        response.headers["X-Request-ID"] = request_id
-        response.headers["X-Process-Time"] = str(process_time)
-        
-        logger.info(
-            f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s"
-        )
-        
-        return response
+    # Log request
+    logger.info(f"[{request_id}] {request.method} {request.url.path}")
+    
+    response = await call_next(request)
+    
+    process_time = time.time() - start_time
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = str(process_time)
+    
+    logger.info(
+        f"[{request_id}] {request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s"
+    )
+    
+    return response
 
 
 # Exception handlers

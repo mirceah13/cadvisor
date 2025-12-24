@@ -57,6 +57,3 @@ mypy==1.8.0
 
 # Rate Limiting
 slowapi==0.1.9
-
-# CORS
-python-cors==1.0.0

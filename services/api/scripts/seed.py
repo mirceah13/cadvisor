@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import logging
+import uuid
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
@@ -35,6 +36,7 @@ def seed_database():
         
         # Create demo user
         demo_user = User(
+            id=uuid.uuid4(),
             email="admin@cadvisor.local",
             password_hash=get_password_hash("CADVisor2025!"),
             name="Demo Admin",
@@ -48,6 +50,7 @@ def seed_database():
         
         # Create demo organization
         demo_org = Organization(
+            id=uuid.uuid4(),
             name="Demo Construction Company",
             slug="demo-construction",
             description="Demo organization for testing CADVisor",
@@ -58,6 +61,7 @@ def seed_database():
         
         # Add user as owner of org
         membership = OrgMember(
+            id=uuid.uuid4(),
             org_id=demo_org.id,
             user_id=demo_user.id,
             role=UserRole.OWNER,
@@ -68,6 +72,7 @@ def seed_database():
         
         # Create subscription (trial)
         subscription = Subscription(
+            id=uuid.uuid4(),
             org_id=demo_org.id,
             provider="mock",
             plan="trial",
@@ -85,6 +90,7 @@ def seed_database():
         
         # Create demo project
         demo_project = Project(
+            id=uuid.uuid4(),
             org_id=demo_org.id,
             name="Sample Residential Project",
             description="Demo project for testing submission analysis",

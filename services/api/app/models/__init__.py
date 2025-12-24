@@ -188,7 +188,7 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
     submissions = relationship("Submission", back_populates="project", cascade="all, delete-orphan")
     
     __table_args__ = (
-        Index('ix_project_org_created', org_id, created_at.desc()),
+        Index('ix_project_org_created', 'org_id', 'created_at'),
     )
 
 
@@ -215,7 +215,7 @@ class Submission(Base, TimestampMixin, SoftDeleteMixin):
     analysis_runs = relationship("AnalysisRun", back_populates="submission", cascade="all, delete-orphan")
     
     __table_args__ = (
-        Index('ix_submission_project_created', project_id, created_at.desc()),
+        Index('ix_submission_project_created', project_id, 'created_at'),
     )
 
 
@@ -243,7 +243,7 @@ class File(Base, TimestampMixin, SoftDeleteMixin):
     submission = relationship("Submission", back_populates="files")
     
     __table_args__ = (
-        Index('ix_file_submission_created', submission_id, created_at.desc()),
+        Index('ix_file_submission_created', submission_id, 'created_at'),
     )
 
 
@@ -291,7 +291,7 @@ class KBChunk(Base, TimestampMixin):
     # Embedding vector (dimension configured via settings, default 768 for nomic-embed-text)
     embedding = Column(Vector(768), nullable=True)
     
-    metadata = Column(JSONB, nullable=True)  # page number, section, etc.
+    chunk_metadata = Column(JSONB, nullable=True)  # page number, section, etc.
     
     # Relationships
     source = relationship("KnowledgeSource", back_populates="chunks")
@@ -331,7 +331,7 @@ class AnalysisRun(Base, TimestampMixin):
     findings = relationship("Finding", back_populates="analysis_run", cascade="all, delete-orphan")
     
     __table_args__ = (
-        Index('ix_analysis_run_submission_created', submission_id, created_at.desc()),
+        Index('ix_analysis_run_submission_created', submission_id, 'created_at'),
     )
 
 
@@ -378,7 +378,7 @@ class FindingFeedback(Base, TimestampMixin):
     finding = relationship("Finding", back_populates="feedback")
     
     __table_args__ = (
-        Index('ix_feedback_finding_created', finding_id, created_at.desc()),
+        Index('ix_feedback_finding_created', finding_id, 'created_at'),
     )
 
 
@@ -416,13 +416,13 @@ class UsageEvent(Base, TimestampMixin):
     
     event_type = Column(String(100), nullable=False, index=True)
     quantity = Column(Integer, default=1, nullable=False)
-    metadata = Column(JSONB, nullable=True)
+    event_metadata = Column(JSONB, nullable=True)
     
     # Relationships
     organization = relationship("Organization", back_populates="usage_events")
     
     __table_args__ = (
-        Index('ix_usage_org_type_created', org_id, event_type, created_at.desc()),
+        Index('ix_usage_org_type_created', org_id, event_type, 'created_at'),
     )
 
 
@@ -471,6 +471,6 @@ class AuditLog(Base, TimestampMixin):
     user = relationship("User", back_populates="audit_logs")
     
     __table_args__ = (
-        Index('ix_audit_org_action_created', org_id, action, created_at.desc()),
-        Index('ix_audit_user_created', user_id, created_at.desc()),
+        Index('ix_audit_org_action_created', org_id, action, 'created_at'),
+        Index('ix_audit_user_created', user_id, 'created_at'),
     )

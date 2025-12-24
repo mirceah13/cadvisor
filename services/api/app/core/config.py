@@ -2,9 +2,10 @@
 Configuration Settings
 """
 from typing import List, Optional
-from pydantic_settings import BaseSettings
-from pydantic import Field, validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, validator, field_validator
 import os
+import json
 
 
 class Settings(BaseSettings):
@@ -45,9 +46,19 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: List[str] = Field(
         default=["http://localhost:3000"],
-        env="CORS_ORIGINS"
     )
     CORS_CREDENTIALS: bool = Field(default=True, env="CORS_CREDENTIALS")
+    
+    @field_validator('CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                # Fallback to comma-separated
+                return [origin.strip() for origin in v.split(',')]
+        return v
     
     # Trusted hosts (production)
     ALLOWED_HOSTS: List[str] = Field(default=["*"], env="ALLOWED_HOSTS")
@@ -82,8 +93,8 @@ class Settings(BaseSettings):
     AI_SERVICE_BASE_URL: str = Field(..., env="AI_SERVICE_BASE_URL")
     
     # Celery
-    CELERY_BROKER_URL: str = Field(..., env="CELERY_BROKER_URL")
-    CELERY_RESULT_BACKEND: str = Field(..., env="CELERY_RESULT_BACKEND")
+    CELERY_BROKER_URL: str = Field(default="redis://redis:6379/0", env="CELERY_BROKER_URL")
+    CELERY_RESULT_BACKEND: str = Field(default="redis://redis:6379/0", env="CELERY_RESULT_BACKEND")
     
     # Billing
     BILLING_PROVIDER: str = Field(default="mock", env="BILLING_PROVIDER")
@@ -102,12 +113,6 @@ class Settings(BaseSettings):
     # Data retention
     SOFT_DELETE_RETENTION_DAYS: int = Field(default=90, env="SOFT_DELETE_RETENTION_DAYS")
     AUDIT_LOG_RETENTION_DAYS: int = Field(default=365, env="AUDIT_LOG_RETENTION_DAYS")
-    
-    @validator("CORS_ORIGINS", pre=True)
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
     
     @validator("ALLOWED_MIME_TYPES", pre=True)
     def parse_mime_types(cls, v):

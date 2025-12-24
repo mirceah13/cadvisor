@@ -7,7 +7,7 @@ WORKDIR /app
 COPY apps/web/package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy application code
 COPY apps/web/ .

@@ -76,6 +76,19 @@ class Settings(BaseSettings):
     MINIO_BUCKET_NAME: str = Field(default="buildguard-files", env="MINIO_BUCKET_NAME")
     MINIO_REGION: str = Field(default="us-east-1", env="MINIO_REGION")
     
+    # Aliases for MinIO client
+    @property
+    def MINIO_ACCESS_KEY(self) -> str:
+        return self.MINIO_ROOT_USER
+    
+    @property
+    def MINIO_SECRET_KEY(self) -> str:
+        return self.MINIO_ROOT_PASSWORD
+    
+    @property
+    def MINIO_BUCKET(self) -> str:
+        return self.MINIO_BUCKET_NAME
+    
     # File processing
     MAX_UPLOAD_SIZE_BYTES: int = Field(default=2147483648, env="MAX_UPLOAD_SIZE_BYTES")  # 2GB
     PRESIGNED_URL_EXPIRY: int = Field(default=900, env="PRESIGNED_URL_EXPIRY")  # 15 minutes

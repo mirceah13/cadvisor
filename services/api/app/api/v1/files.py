@@ -10,11 +10,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, require_permissions
 from app.models import User
 from app.services.file import FileService
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/files", tags=["files"])
 
 
 # Request/Response Models
@@ -77,13 +77,14 @@ def presign_upload(
     - Returns URL valid for 15 minutes
     - Files are isolated by organization
     """
-    # Get user's organization
+    # Get user's organization (assuming user has current_org_id set)
     if not current_user.org_memberships:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User must belong to an organization"
         )
     
+    # Get first org membership (in real app, use current_org context)
     org_membership = current_user.org_memberships[0]
     org_id = org_membership.org_id
     
@@ -145,7 +146,13 @@ def complete_upload(
     )
     
     # TODO: Trigger background scan job
+    # from app.tasks.files import scan_file
+    # scan_file.delay(str(file_record.id))
+    
     # TODO: If CAD file, trigger extraction
+    # if file_record.mime_type in CAD_MIME_TYPES:
+    #     from app.tasks.cad import extract_cad_metadata
+    #     extract_cad_metadata.delay(str(file_record.id))
     
     return FileResponse(
         id=file_record.id,
@@ -226,7 +233,7 @@ def list_files(
     files = file_service.list_files(
         org_id=org_id,
         submission_id=submission_id,
-        limit=min(limit, 100),
+        limit=min(limit, 100),  # Cap at 100
         offset=offset
     )
     
@@ -248,12 +255,13 @@ def list_files(
 @router.delete("/{file_id}")
 def delete_file(
     file_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(["file:delete"])),
     db: Session = Depends(get_db)
 ):
     """
     Delete a file (soft delete)
     
+    - Requires file:delete permission
     - File is marked as deleted but not immediately removed from storage
     """
     if not current_user.org_memberships:
@@ -279,4 +287,3 @@ def delete_file(
         )
     
     return {"message": "File deleted successfully"}
-

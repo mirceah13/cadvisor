@@ -61,14 +61,15 @@ export default function UploadKnowledgePage() {
           '/files/presign-upload',
           {
             filename: selectedFile.name,
-            content_type: selectedFile.type,
+            mime_type: selectedFile.type,
+            size: selectedFile.size,
           },
           {
             headers: { Authorization: `Bearer ${accessToken}` },
           }
         )
 
-        const { upload_url, storage_key, file_id } = presignResponse.data || presignResponse
+        const { upload_url, storage_key } = presignResponse.data || presignResponse
 
         // Upload file to MinIO
         const uploadResponse = await fetch(upload_url, {
@@ -77,7 +78,6 @@ export default function UploadKnowledgePage() {
           headers: {
             'Content-Type': selectedFile.type,
           },
-          // Simple progress tracking
         })
 
         if (!uploadResponse.ok) {
@@ -90,11 +90,10 @@ export default function UploadKnowledgePage() {
         const completeResponse: any = await apiClient.post(
           '/files/complete-upload',
           {
-            file_id,
             storage_key,
             filename: selectedFile.name,
             mime_type: selectedFile.type,
-            file_size: selectedFile.size,
+            size: selectedFile.size,
           },
           {
             headers: { Authorization: `Bearer ${accessToken}` },

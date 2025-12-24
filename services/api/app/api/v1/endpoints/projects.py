@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
+from uuid import UUID
+from datetime import datetime
 
 from app.core.database import get_db
 from app.models import Project, Submission, User, OrgMember
@@ -18,26 +20,23 @@ router = APIRouter()
 class ProjectCreate(BaseModel):
     name: str
     description: str | None = None
-    type: str = "building"
-    status: str = "active"
+    type: str | None = "building"
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     type: str | None = None
-    status: str | None = None
 
 
 class ProjectResponse(BaseModel):
-    id: int
+    id: UUID
     name: str
-    description: str | None
-    type: str
-    status: str
-    organization_id: int
-    created_at: str
-    updated_at: str
+    description: str | None = None
+    building_type: str | None = None
+    org_id: UUID
+    created_at: datetime
+    updated_at: datetime
     
     class Config:
         from_attributes = True
@@ -63,7 +62,7 @@ async def list_projects(
         )
     
     projects = db.query(Project).filter(
-        Project.organization_id == org_member.organization_id
+        Project.org_id == org_member.org_id
     ).offset(skip).limit(limit).all()
     
     return projects
@@ -90,9 +89,9 @@ async def create_project(
     project = Project(
         name=project_data.name,
         description=project_data.description,
-        type=project_data.type,
-        status=project_data.status,
-        organization_id=org_member.organization_id
+        building_type=project_data.type if hasattr(project_data, 'type') else None,
+        org_id=org_member.org_id,
+        created_by=current_user.id
     )
     
     db.add(project)
@@ -104,7 +103,7 @@ async def create_project(
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
-    project_id: int,
+    project_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -122,7 +121,7 @@ async def get_project(
     
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.organization_id == org_member.organization_id
+        Project.org_id == org_member.org_id
     ).first()
     
     if not project:
@@ -136,7 +135,7 @@ async def get_project(
 
 @router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(
-    project_id: int,
+    project_id: UUID,
     project_data: ProjectUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -155,7 +154,7 @@ async def update_project(
     
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.organization_id == org_member.organization_id
+        Project.org_id == org_member.org_id
     ).first()
     
     if not project:
@@ -182,7 +181,7 @@ async def update_project(
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
-    project_id: int,
+    project_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -200,7 +199,7 @@ async def delete_project(
     
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.organization_id == org_member.organization_id
+        Project.org_id == org_member.org_id
     ).first()
     
     if not project:
@@ -217,7 +216,7 @@ async def delete_project(
 
 @router.get("/{project_id}/submissions")
 async def get_project_submissions(
-    project_id: int,
+    project_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -235,7 +234,7 @@ async def get_project_submissions(
     
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.organization_id == org_member.organization_id
+        Project.org_id == org_member.org_id
     ).first()
     
     if not project:

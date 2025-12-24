@@ -116,8 +116,8 @@ async def register(request: SignupRequest, db: Session = Depends(get_db)):
     # Generate token
     access_token = create_access_token(
         data={
-            "sub": user.email,
-            "user_id": str(user.id),
+            "sub": str(user.id),
+            "email": user.email,
             "org_id": str(organization.id)
         }
     )
@@ -170,8 +170,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Generate token
     access_token = create_access_token(
         data={
-            "sub": user.email,
-            "user_id": str(user.id),
+            "sub": str(user.id),
+            "email": user.email,
             "org_id": str(org_member.org_id)
         }
     )
@@ -241,9 +241,9 @@ async def oauth_login(provider: str, request: OAuthRequest, db: Session = Depend
     # Generate token
     access_token = create_access_token(
         data={
-            "sub": user.email,
-            "user_id": user.id,
-            "org_id": user.organization_id
+            "sub": str(user.id),
+            "email": user.email,
+            "org_id": str(user.organization_id)
         }
     )
     

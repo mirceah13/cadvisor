@@ -12,19 +12,20 @@ import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { ArrowLeft, Upload, FileText, Settings, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { LoadingSkeleton } from '@/components/loading-skeleton'
 
 interface Project {
-  id: number
+  id: string
   name: string
-  description: string
-  type: string
-  status: string
+  description: string | null
+  building_type: string | null
+  org_id: string
   created_at: string
   updated_at: string
 }
 
 interface Submission {
-  id: number
+  id: string
   name: string
   status: string
   created_at: string
@@ -52,8 +53,16 @@ export default function ProjectDetailPage() {
             headers: { Authorization: `Bearer ${accessToken}` },
           }),
         ])
-        setProject(projectRes.data)
-        setSubmissions(submissionsRes.data)
+        
+        // Handle both response.data and direct array response
+        const projectData = projectRes.data || projectRes
+        const submissionsData = Array.isArray(submissionsRes) ? submissionsRes : (submissionsRes.data || [])
+        
+        console.log('Project data:', projectData)
+        console.log('Submissions data:', submissionsData)
+        
+        setProject(projectData)
+        setSubmissions(submissionsData)
       } catch (error) {
         console.error('Failed to fetch project:', error)
       } finally {
@@ -64,28 +73,12 @@ export default function ProjectDetailPage() {
     fetchProject()
   }, [accessToken, params.id])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800'
-      case 'archived':
-        return 'bg-gray-100 text-gray-800'
-      case 'completed':
-        return 'bg-blue-100 text-blue-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
-
   if (loading) {
     return (
       <>
         <DashboardNav />
         <div className="flex-1 p-8 pt-6 container">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          </div>
+          <LoadingSkeleton />
         </div>
       </>
     )
@@ -124,7 +117,9 @@ export default function ProjectDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-3xl font-bold tracking-tight">{project.name}</h2>
-              <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
+              {project.building_type && (
+                <Badge variant="secondary">{project.building_type}</Badge>
+              )}
             </div>
             <p className="text-muted-foreground mt-2">{project.description}</p>
             <p className="text-sm text-muted-foreground mt-1">
@@ -172,8 +167,13 @@ export default function ProjectDetailPage() {
               </Card>
             ) : (
               <div className="space-y-4">
-                {submissions.map((submission) => (
-                  <Link key={submission.id} href={`/submissions/${submission.id}`}>
+                {submissions.map((submission, index) => (
+                  <Link 
+                    key={submission.id} 
+                    href={`/submissions/${submission.id}`}
+                    className="block transform transition-all duration-200 hover:scale-[1.01]"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
                     <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
                       <div className="flex items-center justify-between">
                         <div>

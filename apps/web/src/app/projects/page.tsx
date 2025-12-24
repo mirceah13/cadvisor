@@ -10,12 +10,14 @@ import { Plus, FolderOpen, Calendar, FileText } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { formatDistanceToNow } from 'date-fns'
+import { CardSkeleton } from '@/components/loading-skeleton'
 
 interface Project {
-  id: number
+  id: string
   name: string
-  description: string
-  status: string
+  description: string | null
+  building_type: string | null
+  org_id: string
   created_at: string
   updated_at: string
   _count?: {
@@ -30,15 +32,30 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     const fetchProjects = async () => {
-      if (!accessToken) return
+      console.log('Fetching projects, accessToken:', accessToken ? 'exists' : 'missing')
+      
+      if (!accessToken) {
+        setLoading(false)
+        return
+      }
 
       try {
         const response = await apiClient.get('/projects', {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
-        setProjects(response.data)
-      } catch (error) {
+        console.log('Full response:', response)
+        console.log('Type of response:', typeof response)
+        console.log('Is response an array?', Array.isArray(response))
+        
+        // The response itself is the data array, not response.data
+        const data = Array.isArray(response) ? response : (response.data || [])
+        console.log('Final data:', data)
+        setProjects(data)
+      } catch (error: any) {
         console.error('Failed to fetch projects:', error)
+        console.error('Error response:', error.response)
+        console.error('Error message:', error.message)
+        setProjects([])
       } finally {
         setLoading(false)
       }
@@ -46,19 +63,6 @@ export default function ProjectsPage() {
 
     fetchProjects()
   }, [accessToken])
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'archived':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-      case 'completed':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-    }
-  }
 
   return (
     <>
@@ -82,16 +86,10 @@ export default function ProjectsPage() {
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(6)].map((_, i) => (
-              <Card key={i} className="p-6">
-                <div className="animate-pulse space-y-3">
-                  <div className="h-5 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-full"></div>
-                  <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-                </div>
-              </Card>
+              <CardSkeleton key={i} />
             ))}
           </div>
-        ) : projects.length === 0 ? (
+        ) : !projects || projects.length === 0 ? (
           <Card className="p-12">
             <div className="flex flex-col items-center justify-center text-center">
               <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
@@ -109,17 +107,24 @@ export default function ProjectsPage() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
-              <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+            {projects.map((project, index) => (
+              <Link 
+                key={project.id} 
+                href={`/projects/${project.id}`}
+                className="transform transition-all duration-200 hover:scale-[1.02]"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer h-full">
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
                       <h3 className="font-semibold text-lg line-clamp-1">
                         {project.name}
                       </h3>
-                      <Badge className={getStatusColor(project.status)}>
-                        {project.status}
-                      </Badge>
+                      {project.building_type && (
+                        <Badge variant="secondary">
+                          {project.building_type}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {project.description}

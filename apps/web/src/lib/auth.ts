@@ -1,8 +1,5 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import GoogleProvider from 'next-auth/providers/google'
-import AppleProvider from 'next-auth/providers/apple'
-import MicrosoftProvider from 'next-auth/providers/microsoft'
 import axios from 'axios'
 
 // Use internal API URL for server-side calls in Docker, fallback to public URL
@@ -39,16 +36,23 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email and password required')
+          return null
         }
 
         try {
           // Call backend API to authenticate - get URL dynamically
           const apiUrl = getApiUrl()
+          
+          console.log('[Auth] Attempting login with API URL:', apiUrl)
+          
           const response = await axios.post(`${apiUrl}/api/v1/auth/login`, {
             email: credentials.email,
             password: credentials.password
+          }, {
+            timeout: 10000 // 10 second timeout
           })
+
+          console.log('[Auth] Login successful for:', credentials.email)
 
           const user = response.data
 
@@ -65,41 +69,44 @@ export const authOptions: NextAuthOptions = {
 
           return null
         } catch (error: any) {
-          console.error('Auth error:', error.response?.data || error.message)
-          throw new Error(error.response?.data?.detail || 'Authentication failed')
-        }
-      }
-    }),
-
-    // Google OAuth Provider
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      authorization: {
-        params: {
-          prompt: 'consent',
-          access_type: 'offline',
-          response_type: 'code'
-        }
-      }
-    }),
-
-    // Apple OAuth Provider
-    AppleProvider({
-      clientId: process.env.APPLE_CLIENT_ID || '',
-      clientSecret: process.env.APPLE_CLIENT_SECRET || ''
-    }),
-
-    // Microsoft OAuth Provider
-    MicrosoftProvider({
-      clientId: process.env.MICROSOFT_CLIENT_ID || '',
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
-      authorization: {
-        params: {
-          scope: 'openid profile email User.Read'
+          // Log detailed error for debugging
+          console.error('[Auth] Login error:', {
+            message: error.message,
+            code: error.code,
+            response: error.response?.data,
+            status: error.response?.status,
+            url: error.config?.url
+          })
+          
+          // Return null instead of throwing to prevent redirect to error page
+          // The error will be handled by the client-side form
+          return null
         }
       }
     })
+
+    // OAuth Providers (disabled - uncomment and configure when needed)
+    // To enable OAuth, install the providers and set environment variables:
+    // npm install next-auth
+    // Then uncomment the providers below and set GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, etc.
+    
+    // GoogleProvider({
+    //   clientId: process.env.GOOGLE_CLIENT_ID || '',
+    //   clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    // }),
+    
+    // AppleProvider({
+    //   clientId: process.env.APPLE_CLIENT_ID || '',
+    //   clientSecret: process.env.APPLE_CLIENT_SECRET || ''
+    // }),
+    
+    // For Microsoft/Azure AD, use:
+    // import AzureADProvider from 'next-auth/providers/azure-ad'
+    // AzureADProvider({
+    //   clientId: process.env.AZURE_AD_CLIENT_ID || '',
+    //   clientSecret: process.env.AZURE_AD_CLIENT_SECRET || '',
+    //   tenantId: process.env.AZURE_AD_TENANT_ID || ''
+    // })
   ],
 
   callbacks: {

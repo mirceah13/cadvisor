@@ -10,14 +10,8 @@ const nextConfig = {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`,
-      },
-    ];
-  },
+  // Removed rewrites - we call the API directly with dynamic URL resolution
+  // This prevents build-time URL hardcoding issues with Docker networking
 };
 
 module.exports = nextConfig;

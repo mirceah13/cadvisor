@@ -32,12 +32,17 @@ export default function LoginPage() {
       })
 
       if (result?.error) {
-        setAuthError(result.error)
+        // Show user-friendly error message
+        setAuthError('Invalid email or password. Please try again.')
+        console.error('Login failed:', result.error)
       } else if (result?.ok) {
         router.push(callbackUrl)
+      } else {
+        setAuthError('Login failed. Please check your credentials and try again.')
       }
     } catch (error) {
-      setAuthError('An unexpected error occurred')
+      console.error('Login error:', error)
+      setAuthError('An unexpected error occurred. Please try again later.')
     } finally {
       setLoading(false)
     }
@@ -136,6 +141,8 @@ export default function LoginPage() {
           </Button>
         </form>
 
+        {/* OAuth providers are currently disabled. To enable, configure providers in lib/auth.ts */}
+        {false && (
         <div className="mt-6">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -206,6 +213,7 @@ export default function LoginPage() {
             </Button>
           </div>
         </div>
+        )}
       </Card>
     </div>
   )

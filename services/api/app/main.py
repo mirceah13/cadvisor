@@ -66,6 +66,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Usage limit enforcement middleware
+from app.middleware.usage_limits import UsageLimitMiddleware
+app.add_middleware(UsageLimitMiddleware)
+
 # Trusted host middleware (production)
 if not settings.DEBUG:
     app.add_middleware(

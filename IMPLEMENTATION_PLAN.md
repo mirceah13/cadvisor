@@ -114,39 +114,40 @@ extract_submission_profile(submission_id) ✓
 **Priority: HIGH - AI foundation**
 
 #### 3.1 Knowledge Base Ingestion
-- [ ] KB source CRUD endpoints
-- [ ] Document chunking strategy (500 tokens, 50 overlap)
-- [ ] Text extraction pipeline
-- [ ] Embedding generation (nomic-embed-text via Ollama)
-- [ ] Vector storage in pgvector
-- [ ] Metadata tagging (jurisdiction, standard_code, edition)
+- [x] KB source CRUD endpoints
+- [x] Document chunking strategy (1000 chars, 200 overlap)
+- [x] Text extraction pipeline (PDF, DOCX, URL)
+- [x] Embedding generation (nomic-embed-text via Ollama)
+- [x] Vector storage in pgvector
+- [x] Metadata tagging (category, source_type, title)
 
 #### 3.2 RAG Implementation
-- [ ] Semantic search over KB chunks
-- [ ] Filtered retrieval (jurisdiction, category)
-- [ ] Context window management
-- [ ] Citation tracking
-- [ ] Relevance scoring
+- [x] Semantic search over KB chunks
+- [x] Filtered retrieval (category filter)
+- [x] Cosine similarity with pgvector
+- [x] Citation tracking (source metadata)
+- [x] Relevance scoring (min_similarity threshold)
 
 **API Endpoints:**
 ```
-POST   /api/v1/kb/sources
-GET    /api/v1/kb/sources
-POST   /api/v1/kb/sources/{id}/ingest
-POST   /api/v1/kb/search
+POST   /api/v1/kb/sources ✓
+GET    /api/v1/kb/sources ✓
+GET    /api/v1/kb/sources/{id} ✓
+DELETE /api/v1/kb/sources/{id} ✓
+POST   /api/v1/kb/sources/{id}/reingest ✓
+POST   /api/v1/kb/search ✓
 ```
 
 **Celery Tasks:**
 ```
-ingest_kb_source(source_id)
-generate_embeddings(chunk_ids)
+ingest_knowledge_source(source_id) ✓
 ```
 
 **Frontend:**
-- KB source upload page
-- Ingestion status monitor
-- Source management table
-- Search/test interface
+- [ ] KB source upload page
+- [ ] Ingestion status monitor
+- [ ] Source management table
+- [ ] Search/test interface
 
 **Acceptance Criteria:**
 - ✅ Ingest PDF standards documents

@@ -141,7 +141,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     user = db.query(User).filter(User.email == request.email).first()
     
-    if not user or not verify_password(request.password, user.hashed_password):
+    if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -153,25 +153,37 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Account is inactive",
         )
     
+    # Get user's organization membership
+    org_member = db.query(OrgMember).filter(
+        OrgMember.user_id == user.id,
+        OrgMember.status == OrgMemberStatus.ACTIVE
+    ).first()
+    
+    if not org_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active organization membership",
+        )
+    
     logger.info(f"User logged in: {user.email}")
     
     # Generate token
     access_token = create_access_token(
         data={
             "sub": user.email,
-            "user_id": user.id,
-            "org_id": user.organization_id
+            "user_id": str(user.id),
+            "org_id": str(org_member.org_id)
         }
     )
     
     return TokenResponse(
         access_token=access_token,
         user={
-            "id": user.id,
+            "id": str(user.id),
             "email": user.email,
-            "full_name": user.full_name,
-            "organization_id": user.organization_id,
-            "role": user.role,
+            "name": user.name,
+            "organization_id": str(org_member.org_id),
+            "role": org_member.role.value,
         },
     )
 

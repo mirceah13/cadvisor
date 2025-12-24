@@ -6,19 +6,19 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
 const errorMessages: Record<string, string> = {
-  Configuration: 'There is a problem with the server configuration.',
+  Configuration: 'OAuth provider is not configured. Please use email/password login instead.',
   AccessDenied: 'You do not have permission to access this resource.',
   Verification: 'The verification token has expired or has already been used.',
-  OAuthSignin: 'Error in constructing an authorization URL.',
-  OAuthCallback: 'Error in handling the response from an OAuth provider.',
+  OAuthSignin: 'OAuth provider is not configured. Please use email/password login.',
+  OAuthCallback: 'OAuth login failed. The provider may not be configured correctly.',
   OAuthCreateAccount: 'Could not create OAuth provider user in the database.',
   EmailCreateAccount: 'Could not create email provider user in the database.',
-  Callback: 'Error in the OAuth callback handler route.',
+  Callback: 'OAuth login failed. Please try email/password login instead.',
   OAuthAccountNotLinked: 'Email already exists with a different sign-in method.',
   EmailSignin: 'Failed to send the email with the magic link.',
-  CredentialsSignin: 'Sign in failed. Check the details you provided are correct.',
+  CredentialsSignin: 'Invalid email or password. Please check your credentials and try again.',
   SessionRequired: 'Please sign in to access this page.',
-  default: 'An unexpected error occurred during authentication.'
+  default: 'An unexpected error occurred during authentication. Please try again or use email/password login.'
 }
 
 export default function AuthErrorPage() {

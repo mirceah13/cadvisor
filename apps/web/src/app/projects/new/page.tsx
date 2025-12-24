@@ -29,7 +29,6 @@ export default function NewProjectPage() {
     name: '',
     description: '',
     type: 'building',
-    status: 'active',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,8 +42,11 @@ export default function NewProjectPage() {
         timeout: 10000, // 10 second timeout
       })
       
-      if (response.data?.id) {
-        router.push(`/projects/${response.data.id}`)
+      // Handle both response.data and direct response
+      const project = response.data || response
+      
+      if (project?.id) {
+        router.push(`/projects/${project.id}`)
       } else {
         throw new Error('Invalid response from server')
       }
@@ -150,23 +152,6 @@ export default function NewProjectPage() {
                   <SelectItem value="mechanical">Mechanical</SelectItem>
                   <SelectItem value="electrical">Electrical</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value })}
-              >
-                <SelectTrigger id="status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="planning">Planning</SelectItem>
-                  <SelectItem value="on_hold">On Hold</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -8,6 +8,16 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { ArrowLeft, Upload, FileText, Settings, Trash2 } from 'lucide-react'
@@ -39,6 +49,8 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -72,6 +84,24 @@ export default function ProjectDetailPage() {
 
     fetchProject()
   }, [accessToken, params.id])
+
+  const handleDelete = async () => {
+    if (!accessToken || !params.id) return
+    
+    setDeleting(true)
+    try {
+      await apiClient.delete(`/projects/${params.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      router.push('/projects')
+    } catch (error: any) {
+      console.error('Failed to delete project:', error)
+      alert(error.response?.data?.detail || 'Failed to delete project')
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -137,6 +167,14 @@ export default function ProjectDetailPage() {
               <Link href={`/projects/${project.id}/settings`}>
                 <Settings className="h-4 w-4" />
               </Link>
+            </Button>
+            <Button 
+              variant="destructive" 
+              size="icon"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleting}
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -213,6 +251,28 @@ export default function ProjectDetailPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the project "{project?.name}" and all associated submissions. 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? 'Deleting...' : 'Delete Project'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

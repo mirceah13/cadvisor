@@ -2,10 +2,11 @@
 Authentication endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field
+from datetime import datetime, timedelta
+from typing import Optional
 import logging
 
 from app.core.database import get_db
@@ -15,17 +16,19 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
 )
-from app.models import User
+from app.models import User, Organization
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+security = HTTPBearer()
 
 
 # Schemas
 class SignupRequest(BaseModel):
     email: EmailStr
-    password: str
-    name: str
+    password: str = Field(..., min_length=8)
+    full_name: str
+    organization_name: str
 
 
 class LoginRequest(BaseModel):
@@ -33,17 +36,23 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class OAuthRequest(BaseModel):
+    access_token: str
+    id_token: Optional[str] = None
+    provider: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     user: dict
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def signup(request: SignupRequest, db: Session = Depends(get_db)):
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(request: SignupRequest, db: Session = Depends(get_db)):
     """
-    Create a new user account
+    Create a new user account with organization
     """
     # Check if user exists
     existing_user = db.query(User).filter(User.email == request.email).first()
@@ -53,32 +62,49 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
             detail="Email already registered",
         )
     
+    # Create organization
+    organization = Organization(
+        name=request.organization_name,
+        subscription_tier="trial",
+        subscription_status="active",
+        trial_start=datetime.utcnow(),
+        trial_end=datetime.utcnow() + timedelta(days=14),
+    )
+    db.add(organization)
+    db.flush()
+    
     # Create user
     user = User(
         email=request.email,
-        password_hash=get_password_hash(request.password),
-        name=request.name,
+        hashed_password=get_password_hash(request.password),
+        full_name=request.full_name,
+        organization_id=organization.id,
+        role="admin",  # First user is admin
         is_active=True,
-        email_verified=False,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     
-    logger.info(f"User created: {user.email}")
+    logger.info(f"User created: {user.email}, Organization: {organization.name}")
     
-    # Generate tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    # Generate token
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "user_id": user.id,
+            "org_id": user.organization_id
+        }
+    )
     
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
         user={
-            "id": str(user.id),
+            "id": user.id,
             "email": user.email,
-            "name": user.name,
-            "is_active": user.is_active,
+            "full_name": user.full_name,
+            "organization_id": user.organization_id,
+            "role": user.role,
         },
     )
 
@@ -90,10 +116,10 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     user = db.query(User).filter(User.email == request.email).first()
     
-    if not user or not verify_password(request.password, user.password_hash):
+    if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Invalid email or password",
         )
     
     if not user.is_active:
@@ -102,26 +128,141 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Account is inactive",
         )
     
-    # Update last login
-    user.last_login_at = datetime.utcnow()
-    db.commit()
-    
     logger.info(f"User logged in: {user.email}")
     
-    # Generate tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    # Generate token
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "user_id": user.id,
+            "org_id": user.organization_id
+        }
+    )
     
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
         user={
-            "id": str(user.id),
+            "id": user.id,
             "email": user.email,
-            "name": user.name,
-            "is_active": user.is_active,
+            "full_name": user.full_name,
+            "organization_id": user.organization_id,
+            "role": user.role,
         },
     )
+
+
+@router.post("/oauth/{provider}", response_model=TokenResponse)
+async def oauth_login(provider: str, request: OAuthRequest, db: Session = Depends(get_db)):
+    """
+    Login with OAuth provider (Google, Apple, Microsoft)
+    """
+    if provider not in ["google", "apple", "microsoft"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported OAuth provider",
+        )
+    
+    # TODO: Verify OAuth token with provider
+    # For now, this is a placeholder
+    # In production, verify tokens with the respective provider APIs
+    
+    # Mock user info from OAuth
+    # In production, extract from verified token
+    email = f"oauth_{provider}@example.com"
+    full_name = f"OAuth User from {provider.title()}"
+    
+    # Check if user exists
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        # Create new user from OAuth
+        organization = Organization(
+            name=f"{full_name}'s Organization",
+            subscription_tier="trial",
+            subscription_status="active",
+            trial_start=datetime.utcnow(),
+            trial_end=datetime.utcnow() + timedelta(days=14),
+        )
+        db.add(organization)
+        db.flush()
+        
+        import secrets
+        user = User(
+            email=email,
+            hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+            full_name=full_name,
+            organization_id=organization.id,
+            role="admin",
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"User created via OAuth: {user.email}")
+    
+    # Generate token
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "user_id": user.id,
+            "org_id": user.organization_id
+        }
+    )
+    
+    return TokenResponse(
+        access_token=access_token,
+        user={
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "organization_id": user.organization_id,
+            "role": user.role,
+        },
+    )
+
+
+@router.get("/me")
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current authenticated user
+    """
+    from jose import JWTError, jwt
+    from app.core.config import settings
+    
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "organization_id": user.organization_id,
+        "role": user.role,
+        "is_active": user.is_active,
+    }
 
 
 @router.post("/logout")

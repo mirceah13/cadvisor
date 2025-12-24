@@ -14,32 +14,41 @@ All foundational infrastructure is in place and working:
 **Priority: HIGH - Core functionality needed for everything else**
 
 #### 1.1 MinIO Integration & File Operations
-- [ ] Implement pre-signed URL generation for uploads
-- [ ] Create file upload completion handler
-- [ ] Add file download with signed URLs
+- [x] Implement pre-signed URL generation for uploads
+- [x] Create file upload completion handler
+- [x] Add file download with signed URLs
 - [ ] Implement file scanning hook (placeholder + ClamAV stub)
-- [ ] Add checksum validation (SHA-256)
-- [ ] Create MinIO bucket initialization script
+- [x] Add checksum validation (SHA-256)
+- [x] Create MinIO bucket initialization script
 
 **API Endpoints:**
 ```
-POST   /api/v1/files/presign-upload
-POST   /api/v1/files/complete-upload  
-GET    /api/v1/files/{id}/download
-DELETE /api/v1/files/{id}
+POST   /api/v1/files/presign-upload ✓
+POST   /api/v1/files/complete-upload ✓
+GET    /api/v1/files/{id}/download ✓
+GET    /api/v1/files ✓
+DELETE /api/v1/files/{id} ✓
+```
+
+**Services Implemented:**
+```
+StorageService: MinIO/S3 integration, pre-signed URLs, bucket management
+FileService: File validation, CRUD, access control, soft delete
 ```
 
 **Frontend Components:**
-- File upload component with progress
-- File list with download/delete actions
-- Drag-and-drop zone
-- Upload status indicators
+- [ ] File upload component with progress
+- [ ] File list with download/delete actions
+- [ ] Drag-and-drop zone
+- [ ] Upload status indicators
 
 **Acceptance Criteria:**
-- ✅ Upload 500MB+ files directly to MinIO
+- ✅ Upload 2GB+ files directly to MinIO
 - ✅ Files isolated by organization
 - ✅ Secure signed URLs with 15min expiry
 - ✅ SHA-256 verification
+- ✅ Multi-tenant access control
+- ✅ Soft delete with metadata preservation
 
 ---
 

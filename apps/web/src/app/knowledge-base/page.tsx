@@ -35,9 +35,12 @@ export default function KnowledgeBasePage() {
         const response = await apiClient.get('/kb/sources', {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
-        setSources(response.data)
+        // Handle both response.data and direct array response
+        const sourcesData = Array.isArray(response) ? response : (response.data || [])
+        setSources(sourcesData)
       } catch (error) {
         console.error('Failed to fetch knowledge sources:', error)
+        setSources([]) // Set empty array on error
       } finally {
         setLoading(false)
       }
@@ -46,7 +49,7 @@ export default function KnowledgeBasePage() {
     fetchSources()
   }, [accessToken])
 
-  const filteredSources = sources.filter((source) =>
+  const filteredSources = (sources || []).filter((source) =>
     source.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -106,6 +109,16 @@ export default function KnowledgeBasePage() {
                   Upload Document
                 </Link>
               </Button>
+            </div>
+          </Card>
+        ) : filteredSources.length === 0 ? (
+          <Card className="p-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <Search className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No results found</h3>
+              <p className="text-muted-foreground">
+                No documents match "{searchQuery}"
+              </p>
             </div>
           </Card>
         ) : (

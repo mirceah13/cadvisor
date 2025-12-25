@@ -13,6 +13,7 @@ from app.core.database import SessionLocal
 from app.models import KnowledgeSource, File
 from app.services.knowledge_base import KnowledgeBaseService
 from app.services.storage import StorageService
+from sqlalchemy.orm.attributes import flag_modified
 from app.tasks.cad import DatabaseTask
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,14 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         if not source:
             raise ValueError(f"KnowledgeSource {source_id} not found")
         
-        # Update status
+        # Update status with progress
         source.status = "processing"
+        source.meta_data = source.meta_data or {}
+        source.meta_data["progress"] = {
+            "stage": "downloading",
+            "message": "Downloading and extracting text..."
+        }
+        flag_modified(source, "meta_data")
         db.commit()
         
         # Extract text based on source type
@@ -78,6 +85,15 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
             raise ValueError("Insufficient text content extracted")
         
         logger.info(f"Extracted {len(text_content)} characters from source {source_id}")
+        
+        # Update progress: extraction complete
+        source.meta_data["progress"] = {
+            "stage": "chunking",
+            "message": "Creating text chunks...",
+            "char_count": len(text_content)
+        }
+        flag_modified(source, "meta_data")
+        db.commit()
         
         # Determine chunking strategy
         chunking_strategy = "general"
@@ -124,8 +140,8 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
             
             if source:
                 source.status = "failed"
-                source.metadata = source.metadata or {}
-                source.metadata["error"] = str(e)
+                source.meta_data = source.meta_data or {}
+                source.meta_data["error"] = str(e)
                 db.commit()
         except Exception as db_error:
             logger.error(f"Failed to update error status: {db_error}")
@@ -152,26 +168,19 @@ def _extract_text_from_file(file: File) -> str:
         Extracted text content
     """
     import tempfile
-    import requests
+    import os
     from app.services.cad_parser import PDFParser, DOCXParser
     
     storage = StorageService()
     
-    # Download file
-    download_url = storage.generate_download_url(
-        file.storage_path,
-        expires_in=3600
-    )
-    
+    # Download file directly from MinIO (works inside Docker)
     with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
         file_path = tmp.name
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()
-        
-        for chunk in response.iter_content(chunk_size=8192):
-            tmp.write(chunk)
     
     try:
+        # Download from MinIO
+        storage.download_file_to_path(file.storage_key, file_path)
+        
         # Extract text based on MIME type
         if file.mime_type == "application/pdf":
             parser = PDFParser()

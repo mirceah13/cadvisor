@@ -6,7 +6,7 @@ import { DashboardNav } from '@/components/dashboard-nav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Plus, BookOpen, FileText, Search } from 'lucide-react'
+import { Plus, BookOpen, FileText, Search, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { Input } from '@/components/ui/input'
@@ -64,12 +64,20 @@ export default function KnowledgeBasePage() {
               Manage compliance documents and standards for AI analysis
             </p>
           </div>
-          <Button asChild>
-            <Link href="/knowledge-base/upload">
-              <Plus className="mr-2 h-4 w-4" />
-              Upload Document
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/knowledge-base/dashboard">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                View Stats
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/knowledge-base/upload">
+                <Plus className="mr-2 h-4 w-4" />
+                Upload Document
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-4">

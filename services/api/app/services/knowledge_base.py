@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models import KnowledgeSource, KBChunk
 from app.services.storage import StorageService
@@ -70,10 +71,22 @@ class KnowledgeBaseService:
         
         logger.info(f"Created {len(chunks)} chunks for source {source_id}")
         
+        # Update progress: chunking complete
+        source.meta_data = source.meta_data or {}
+        source.meta_data["progress"] = {
+            "stage": "embedding",
+            "total_chunks": len(chunks),
+            "processed_chunks": 0,
+            "message": "Generating embeddings..."
+        }
+        flag_modified(source, "meta_data")
+        self.db.commit()
+        
         # Generate embeddings and store chunks
         chunks_created = 0
+        total_chunks = len(chunks)
         
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             # Generate embedding
             embedding = await self.embedding_service.generate_embedding(chunk.text)
             
@@ -83,11 +96,11 @@ class KnowledgeBaseService:
             
             # Create chunk record
             kb_chunk = KBChunk(
-                source_id=source_id,
+                knowledge_source_id=source_id,
                 chunk_index=chunk.chunk_index,
-                content=chunk.text,
+                chunk_text=chunk.text,
                 embedding=embedding,
-                metadata={
+                chunk_metadata={
                     **chunk.metadata,
                     "start_char": chunk.start_char,
                     "end_char": chunk.end_char,
@@ -97,11 +110,29 @@ class KnowledgeBaseService:
             
             self.db.add(kb_chunk)
             chunks_created += 1
+            
+            # Update progress every 10 chunks or on last chunk
+            if (i + 1) % 10 == 0 or (i + 1) == total_chunks:
+                source.meta_data["progress"] = {
+                    "stage": "embedding",
+                    "total_chunks": total_chunks,
+                    "processed_chunks": i + 1,
+                    "message": f"Processing chunk {i + 1} of {total_chunks}..."
+                }
+                flag_modified(source, "meta_data")
+                self.db.commit()
         
         # Update source status
         source.status = "ready"
-        source.metadata = source.metadata or {}
-        source.metadata["chunks_count"] = chunks_created
+        source.meta_data = source.meta_data or {}
+        source.meta_data["chunks_count"] = chunks_created
+        source.meta_data["progress"] = {
+            "stage": "complete",
+            "total_chunks": chunks_created,
+            "processed_chunks": chunks_created,
+            "message": "Processing complete"
+        }
+        flag_modified(source, "meta_data")
         
         self.db.commit()
         
@@ -149,7 +180,7 @@ class KnowledgeBaseService:
             (1 - func.cosine_distance(KBChunk.embedding, query_embedding)).label('similarity')
         ).join(
             KnowledgeSource,
-            KBChunk.source_id == KnowledgeSource.id
+            KBChunk.knowledge_source_id == KnowledgeSource.id
         ).filter(
             KnowledgeSource.org_id == org_id,
             KnowledgeSource.status == "ready"
@@ -193,6 +224,7 @@ class KnowledgeBaseService:
         title: str,
         source_type: str,
         category: str,
+        uploaded_by: UUID,
         file_id: Optional[UUID] = None,
         url: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
@@ -205,6 +237,7 @@ class KnowledgeBaseService:
             title: Source title
             source_type: "document", "url", "text"
             category: Category (e.g., "building_code", "fire_safety")
+            uploaded_by: User ID who uploaded
             file_id: Optional file ID if source is a document
             url: Optional URL if source is from web
             metadata: Additional metadata
@@ -212,6 +245,14 @@ class KnowledgeBaseService:
         Returns:
             Created KnowledgeSource
         """
+        # Get storage_key from file if document type
+        storage_key = None
+        if source_type == "document" and file_id:
+            from app.models import File
+            file_record = self.db.query(File).filter(File.id == file_id).first()
+            if file_record:
+                storage_key = file_record.storage_key
+        
         source = KnowledgeSource(
             org_id=org_id,
             title=title,
@@ -219,8 +260,10 @@ class KnowledgeBaseService:
             category=category,
             file_id=file_id,
             url=url,
-            status="pending",
-            metadata=metadata or {}
+            storage_key=storage_key,
+            status="uploaded",
+            uploaded_by=uploaded_by,
+            meta_data=metadata or {}
         )
         
         self.db.add(source)
@@ -269,7 +312,7 @@ class KnowledgeBaseService:
         
         # Delete all chunks
         self.db.query(KBChunk).filter(
-            KBChunk.source_id == source_id
+            KBChunk.knowledge_source_id == source_id
         ).delete()
         
         # Delete source

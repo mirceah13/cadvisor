@@ -224,7 +224,7 @@ class File(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "files"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    submission_id = Column(UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, index=True)
+    submission_id = Column(UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="CASCADE"), nullable=True, index=True)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     
     storage_key = Column(String(500), nullable=False, unique=True)
@@ -255,13 +255,19 @@ class KnowledgeSource(Base, TimestampMixin, SoftDeleteMixin):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     
     title = Column(String(500), nullable=False)
+    source_type = Column(String(50), nullable=True)  # document, url, text
+    category = Column(String(100), nullable=True, index=True)  # building_code, fire_safety, etc.
+    file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True)
+    url = Column(String(1000), nullable=True)  # Source URL if applicable
+    meta_data = Column('metadata', JSONB, nullable=True)  # Column name in DB is 'metadata', but we access it as meta_data
+    
     jurisdiction = Column(String(100), nullable=True, index=True)
     standard_code = Column(String(100), nullable=True, index=True)
     edition_date = Column(DateTime(timezone=True), nullable=True)
     language = Column(String(10), default="en", nullable=False)
     tags = Column(JSONB, nullable=True)
     
-    storage_key = Column(String(500), nullable=False)
+    storage_key = Column(String(500), nullable=True)  # MinIO storage key if document
     source_url = Column(String(1000), nullable=True)
     
     status = Column(Enum(KBSourceStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=KBSourceStatus.UPLOADED)
@@ -271,9 +277,11 @@ class KnowledgeSource(Base, TimestampMixin, SoftDeleteMixin):
     # Relationships
     organization = relationship("Organization", back_populates="knowledge_sources")
     chunks = relationship("KBChunk", back_populates="source", cascade="all, delete-orphan")
+    file = relationship("File", foreign_keys=[file_id])
     
     __table_args__ = (
         Index('ix_kb_source_jurisdiction', jurisdiction, standard_code),
+        Index('ix_kb_source_category', category),
     )
 
 
@@ -291,7 +299,7 @@ class KBChunk(Base, TimestampMixin):
     # Embedding vector (dimension configured via settings, default 768 for nomic-embed-text)
     embedding = Column(Vector(768), nullable=True)
     
-    chunk_metadata = Column(JSONB, nullable=True)  # page number, section, etc.
+    chunk_metadata = Column('metadata', JSONB, nullable=True)  # page number, section, etc.
     
     # Relationships
     source = relationship("KnowledgeSource", back_populates="chunks")

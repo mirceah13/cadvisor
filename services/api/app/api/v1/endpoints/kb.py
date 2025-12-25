@@ -40,6 +40,7 @@ class KnowledgeSourceResponse(BaseModel):
     file_id: Optional[UUID]
     url: Optional[str]
     chunks_count: Optional[int] = None
+    meta_data: Optional[Dict[str, Any]] = None
     created_at: str
     
     class Config:
@@ -129,6 +130,7 @@ def create_knowledge_source(
         title=request.title,
         source_type=request.source_type,
         category=request.category,
+        uploaded_by=current_user.id,
         file_id=request.file_id,
         url=request.url,
         metadata=metadata
@@ -139,8 +141,8 @@ def create_knowledge_source(
         task = ingest_knowledge_source.delay(str(source.id))
         
         # Store task ID
-        source.metadata = source.metadata or {}
-        source.metadata["ingestion_task_id"] = task.id
+        source.meta_data = source.meta_data or {}
+        source.meta_data["ingestion_task_id"] = task.id
         db.commit()
     except Exception as e:
         # Log error but don't fail source creation
@@ -154,7 +156,7 @@ def create_knowledge_source(
         status=source.status,
         file_id=source.file_id,
         url=source.url,
-        chunks_count=source.metadata.get("chunks_count") if source.metadata else None,
+        chunks_count=source.meta_data.get("chunks_count") if source.meta_data else None,
         created_at=source.created_at.isoformat()
     )
 
@@ -200,7 +202,7 @@ def list_knowledge_sources(
             status=s.status,
             file_id=s.file_id,
             url=s.url,
-            chunks_count=s.metadata.get("chunks_count") if s.metadata else None,
+            chunks_count=s.meta_data.get("chunks_count") if s.meta_data else None,
             created_at=s.created_at.isoformat()
         )
         for s in sources
@@ -239,7 +241,8 @@ def get_knowledge_source(
         status=source.status,
         file_id=source.file_id,
         url=source.url,
-        chunks_count=source.metadata.get("chunks_count") if source.metadata else None,
+        chunks_count=source.meta_data.get("chunks_count") if source.meta_data else None,
+        meta_data=source.meta_data,
         created_at=source.created_at.isoformat()
     )
 
@@ -354,18 +357,18 @@ def reingest_source(
     
     # Reset status and delete old chunks
     from app.models import KBChunk
-    db.query(KBChunk).filter(KBChunk.source_id == source_id).delete()
+    db.query(KBChunk).filter(KBChunk.knowledge_source_id == source_id).delete()
     
-    source.status = "pending"
-    source.metadata = source.metadata or {}
-    source.metadata.pop("chunks_count", None)
+    source.status = "uploaded"
+    source.meta_data = source.meta_data or {}
+    source.meta_data.pop("chunks_count", None)
     db.commit()
     
     # Trigger ingestion
     try:
         task = ingest_knowledge_source.delay(str(source_id))
         
-        source.metadata["ingestion_task_id"] = task.id
+        source.meta_data["ingestion_task_id"] = task.id
         db.commit()
         
         return {

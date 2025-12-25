@@ -3,20 +3,22 @@ File Management API endpoints
 Handles upload, download, and file operations
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
+import hashlib
 
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import User
 from app.services.file import FileService
+from app.services.storage import StorageService
 from app.tasks.cad import process_cad_file
 
 router = APIRouter()
-
 
 # Request/Response Models
 class PreSignUploadRequest(BaseModel):
@@ -50,9 +52,11 @@ class FileResponse(BaseModel):
     filename: str
     mime_type: str
     size: int
+    storage_key: str
     sha256: Optional[str]
-    scan_status: str
     uploaded_by: UUID
+    submission_id: Optional[UUID]
+    status: str
     created_at: str
     
     class Config:
@@ -109,6 +113,95 @@ def presign_upload(
         expires_in=900
     )
 
+
+@router.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    submission_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Direct file upload via API (proxy to MinIO)
+    
+    - Upload file through API instead of presigned URL
+    - Avoids CORS and signature issues
+    - Returns file record after upload
+    """
+    # Get user's organization
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_membership = current_user.org_memberships[0]
+    org_id = org_membership.org_id
+    
+    # Read file content
+    content = await file.read()
+    file_size = len(content)
+    
+    # Calculate SHA256
+    sha256_hash = hashlib.sha256(content).hexdigest()
+    
+    # Upload to MinIO
+    storage_service = StorageService()
+    # Add timestamp to make storage_key unique
+    import time
+    timestamp = int(time.time() * 1000)
+    storage_key = f"orgs/{org_id}/uploads/{timestamp}_{file.filename}"
+    
+    try:
+        from io import BytesIO
+        storage_service.client.put_object(
+            storage_service.bucket_name,
+            storage_key,
+            data=BytesIO(content),
+            length=file_size,
+            content_type=file.content_type or "application/octet-stream"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload file: {str(e)}"
+        )
+    
+    # Create file record
+    file_service = FileService(db)
+    submission_uuid = UUID(submission_id) if submission_id else None
+    
+    file_record = file_service.create_file_record(
+        org_id=org_id,
+        submission_id=submission_uuid,
+        filename=file.filename,
+        mime_type=file.content_type or "application/octet-stream",
+        size=file_size,
+        storage_key=storage_key,
+        uploaded_by=current_user.id,
+        sha256=sha256_hash
+    )
+    
+    # Trigger background processing for CAD files
+    if _is_cad_file(file.content_type, file.filename):
+        try:
+            process_cad_file.delay(str(file_record.id))
+        except Exception as e:
+            # Log but don't fail the upload
+            print(f"Failed to queue CAD processing: {e}")
+    
+    return FileResponse(
+        id=file_record.id,
+        filename=file_record.filename,
+        mime_type=file_record.mime_type,
+        size=file_record.size_bytes,
+        storage_key=file_record.storage_key,
+        sha256=file_record.sha256,
+        uploaded_by=file_record.uploaded_by,
+        submission_id=file_record.submission_id,
+        created_at=str(file_record.created_at),
+        status=file_record.scan_status or "pending"
+    )
 
 @router.post("/complete-upload", response_model=FileResponse)
 def complete_upload(

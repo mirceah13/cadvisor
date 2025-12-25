@@ -71,6 +71,8 @@ services:
       mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin_change_in_prod};
       mc mb myminio/${MINIO_BUCKET_NAME:-cadvisor-files} --ignore-existing;
       mc anonymous set download myminio/${MINIO_BUCKET_NAME:-cadvisor-files};
+      echo '{\"CORSRules\":[{\"AllowedOrigins\":[\"*\"],\"AllowedMethods\":[\"GET\",\"PUT\",\"POST\",\"DELETE\",\"HEAD\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\"]}]}' > /tmp/cors.json;
+      mc cors set /tmp/cors.json myminio/${MINIO_BUCKET_NAME:-cadvisor-files};
       exit 0;
       "
     networks:
@@ -201,7 +203,13 @@ services:
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL:-http://localhost:8001}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - ./services/api:/app
@@ -213,7 +221,9 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
-      ai:
+      minio:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKERS:-4}
     networks:

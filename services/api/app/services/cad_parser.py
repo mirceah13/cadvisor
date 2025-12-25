@@ -383,24 +383,24 @@ class PDFParser:
             with open(file_path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
                 
-                text_content = []
-                for page_num, page in enumerate(reader.pages[:50]):  # Limit to 50 pages
+                # Extract full text from all pages
+                full_text = []
+                for page in reader.pages:
                     text = page.extract_text()
                     if text:
-                        text_content.append({
-                            "page": page_num + 1,
-                            "content": text[:500],  # First 500 chars
-                        })
+                        full_text.append(text)
+                
+                combined_text = "\n\n".join(full_text)
                 
                 return {
                     "type": "pdf",
                     "page_count": len(reader.pages),
-                    "pages_extracted": len(text_content),
-                    "content": text_content,
+                    "text": combined_text,
+                    "char_count": len(combined_text)
                 }
         except Exception as e:
             logger.error(f"Error parsing PDF: {e}")
-            return {"error": str(e), "type": "pdf"}
+            return {"error": str(e), "type": "pdf", "text": ""}
 
 
 class DOCXParser:
@@ -413,20 +413,23 @@ class DOCXParser:
             
             doc = docx.Document(file_path)
             
+            # Extract full text from all paragraphs
             paragraphs = []
-            for para in doc.paragraphs[:100]:  # Limit to 100 paragraphs
+            for para in doc.paragraphs:
                 if para.text.strip():
-                    paragraphs.append(para.text[:500])
+                    paragraphs.append(para.text)
+            
+            combined_text = "\n\n".join(paragraphs)
             
             return {
                 "type": "docx",
                 "paragraph_count": len(doc.paragraphs),
-                "paragraphs_extracted": len(paragraphs),
-                "content": paragraphs,
+                "text": combined_text,
+                "char_count": len(combined_text)
             }
         except Exception as e:
             logger.error(f"Error parsing DOCX: {e}")
-            return {"error": str(e), "type": "docx"}
+            return {"error": str(e), "type": "docx", "text": ""}
 
 
 class CADParserService:

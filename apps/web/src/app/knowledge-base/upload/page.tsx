@@ -56,55 +56,31 @@ export default function UploadKnowledgePage() {
 
       // Step 1: Upload file if document type
       if (formData.sourceType === 'document' && selectedFile) {
-        // Get presigned URL
-        const presignResponse: any = await apiClient.post(
-          '/files/presign-upload',
+        console.log('Step 1: Uploading file via API...')
+        
+        // Create form data for file upload
+        const uploadFormData = new FormData()
+        uploadFormData.append('file', selectedFile)
+        
+        // Upload directly through API
+        const uploadResponse: any = await apiClient.post(
+          '/files/upload',
+          uploadFormData,
           {
-            filename: selectedFile.name,
-            mime_type: selectedFile.type,
-            size: selectedFile.size,
-          },
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
+            headers: { 
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'multipart/form-data'
+            },
           }
         )
 
-        const { upload_url, storage_key } = presignResponse.data || presignResponse
-
-        // Upload file to MinIO
-        const uploadResponse = await fetch(upload_url, {
-          method: 'PUT',
-          body: selectedFile,
-          headers: {
-            'Content-Type': selectedFile.type,
-          },
-        })
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload file to storage')
-        }
-
-        setUploadProgress(50)
-
-        // Complete upload
-        const completeResponse: any = await apiClient.post(
-          '/files/complete-upload',
-          {
-            storage_key,
-            filename: selectedFile.name,
-            mime_type: selectedFile.type,
-            size: selectedFile.size,
-          },
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
-        )
-
-        fileId = completeResponse.data?.id || completeResponse.id
+        fileId = uploadResponse.data?.id || uploadResponse.id
+        console.log('File uploaded successfully, file ID:', fileId)
         setUploadProgress(70)
       }
 
       // Step 2: Create knowledge source
+      console.log('Step 2: Creating knowledge source...')
       const sourceData: any = {
         title: formData.title,
         source_type: formData.sourceType,
@@ -125,13 +101,19 @@ export default function UploadKnowledgePage() {
       setUploadProgress(100)
 
       const source = response.data || response
+      console.log('Knowledge source created:', source.id)
 
       // Navigate to knowledge base list
       setTimeout(() => {
         router.push('/knowledge-base')
       }, 500)
     } catch (err: any) {
-      console.error('Failed to upload knowledge source:', err)
+      console.error('Upload failed:', err)
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response,
+        code: err.code,
+      })
 
       let errorMessage = 'Failed to upload document. Please try again.'
 

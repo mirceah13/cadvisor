@@ -19,6 +19,7 @@ class StorageService:
     
     def __init__(self):
         """Initialize MinIO client"""
+        # Single client using internal endpoint (works inside Docker)
         self.client = Minio(
             settings.MINIO_ENDPOINT,
             access_key=settings.MINIO_ACCESS_KEY,
@@ -63,12 +64,15 @@ class StorageService:
         storage_key = f"orgs/{org_id}/uploads/{filename}"
         
         try:
-            # Generate pre-signed PUT URL
+            # Generate pre-signed PUT URL using internal endpoint
             url = self.client.presigned_put_object(
                 self.bucket_name,
                 storage_key,
                 expires=timedelta(minutes=expires_minutes)
             )
+            
+            # Replace internal endpoint with external for browser access
+            url = url.replace(f"http://{settings.MINIO_ENDPOINT}", f"http://{settings.MINIO_EXTERNAL_ENDPOINT}")
             
             logger.info(f"Generated upload URL for: {storage_key}")
             return url, storage_key
@@ -93,17 +97,37 @@ class StorageService:
             Pre-signed download URL
         """
         try:
+            # Use internal endpoint for connection, then replace for browser access
             url = self.client.presigned_get_object(
                 self.bucket_name,
                 storage_key,
                 expires=timedelta(minutes=expires_minutes)
             )
             
+            # Replace internal endpoint with external for browser access
+            url = url.replace(f"http://{settings.MINIO_ENDPOINT}", f"http://{settings.MINIO_EXTERNAL_ENDPOINT}")
+            
             logger.info(f"Generated download URL for: {storage_key}")
             return url
             
         except S3Error as e:
             logger.error(f"Error generating download URL: {e}")
+            raise
+    
+    def download_file_to_path(self, storage_key: str, file_path: str) -> None:
+        """
+        Download a file directly from MinIO to a local path.
+        Uses direct MinIO client connection (works inside Docker).
+        
+        Args:
+            storage_key: Object key in storage
+            file_path: Local file path to save to
+        """
+        try:
+            self.client.fget_object(self.bucket_name, storage_key, file_path)
+            logger.info(f"Downloaded file from {storage_key} to {file_path}")
+        except S3Error as e:
+            logger.error(f"Error downloading file: {e}")
             raise
     
     def delete_file(self, storage_key: str) -> bool:

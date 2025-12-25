@@ -69,12 +69,15 @@ class Settings(BaseSettings):
     
     # MinIO/S3 Storage
     MINIO_ENDPOINT: str = Field(..., env="MINIO_ENDPOINT")
-    MINIO_EXTERNAL_ENDPOINT: str = Field(default="localhost:9000", env="MINIO_EXTERNAL_ENDPOINT")
+    MINIO_EXTERNAL_ENDPOINT: str = Field(default="localhost:9002", env="MINIO_EXTERNAL_ENDPOINT")
     MINIO_ROOT_USER: str = Field(..., env="MINIO_ROOT_USER")
     MINIO_ROOT_PASSWORD: str = Field(..., env="MINIO_ROOT_PASSWORD")
     MINIO_USE_SSL: bool = Field(default=False, env="MINIO_USE_SSL")
     MINIO_BUCKET_NAME: str = Field(default="buildguard-files", env="MINIO_BUCKET_NAME")
     MINIO_REGION: str = Field(default="us-east-1", env="MINIO_REGION")
+    
+    # Ollama
+    OLLAMA_BASE_URL: str = Field(default="http://ollama:11434", env="OLLAMA_BASE_URL")
     
     # Aliases for MinIO client
     @property

@@ -15,7 +15,7 @@ class EmbeddingService:
     """Service for generating text embeddings via Ollama"""
     
     def __init__(self):
-        self.base_url = settings.AI_SERVICE_BASE_URL
+        self.base_url = settings.OLLAMA_BASE_URL
         self.model = "nomic-embed-text"  # Optimized for RAG
         self.dimension = 768  # nomic-embed-text dimension
         

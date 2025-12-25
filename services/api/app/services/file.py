@@ -114,7 +114,7 @@ class FileService:
             submission_id=submission_id,
             filename=filename,
             mime_type=mime_type,
-            size=size,
+            size_bytes=size,
             storage_key=storage_key,
             uploaded_by=uploaded_by,
             sha256=sha256,

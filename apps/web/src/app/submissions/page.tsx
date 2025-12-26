@@ -39,9 +39,10 @@ export default function SubmissionsPage() {
         const response = await apiClient.get('/submissions', {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
-        setSubmissions(response.data)
+        setSubmissions(response.data || [])
       } catch (error) {
         console.error('Failed to fetch submissions:', error)
+        setSubmissions([])
       } finally {
         setLoading(false)
       }

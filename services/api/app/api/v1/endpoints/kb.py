@@ -5,17 +5,21 @@ Manages knowledge sources and semantic search
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm.attributes import flag_modified
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field
+import logging
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import User
+from app.models import User, KnowledgeSource, KBChunk
 from app.services.knowledge_base import KnowledgeBaseService
 from app.tasks.kb import ingest_knowledge_source
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Request/Response Models
@@ -202,7 +206,7 @@ def list_knowledge_sources(
             status=s.status,
             file_id=s.file_id,
             url=s.url,
-            chunks_count=s.meta_data.get("chunks_count") if s.meta_data else None,
+            chunks_count=kb_service.get_chunks_count(s.id),
             created_at=s.created_at.isoformat()
         )
         for s in sources
@@ -241,7 +245,7 @@ def get_knowledge_source(
         status=source.status,
         file_id=source.file_id,
         url=source.url,
-        chunks_count=source.meta_data.get("chunks_count") if source.meta_data else None,
+        chunks_count=kb_service.get_chunks_count(source.id),
         meta_data=source.meta_data,
         created_at=source.created_at.isoformat()
     )
@@ -380,3 +384,119 @@ def reingest_source(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to queue re-ingestion: {str(e)}"
         )
+
+
+@router.post("/sources/{source_id}/cancel")
+def cancel_source_processing(
+    source_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cancel/stop processing of a knowledge source
+    
+    - Marks the source as failed to stop polling
+    - Revokes the Celery task if still running
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_id = current_user.org_memberships[0].org_id
+    
+    kb_service = KnowledgeBaseService(db)
+    source = kb_service.get_source(source_id, org_id)
+    
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge source not found"
+        )
+    
+    # Get task ID if available
+    task_id = None
+    if source.meta_data:
+        task_id = source.meta_data.get("ingestion_task_id")
+    
+    # Revoke celery task
+    if task_id:
+        try:
+            from app.core.celery_app import celery_app
+            celery_app.control.revoke(task_id, terminate=True, signal='SIGKILL')
+        except Exception as e:
+            logger.warning(f"Failed to revoke task {task_id}: {e}")
+    
+    # Update source status
+    source.status = "failed"
+    source.meta_data = source.meta_data or {}
+    source.meta_data["error"] = "Processing cancelled by user"
+    source.meta_data["cancelled_at"] = str(func.now())
+    flag_modified(source, "meta_data")
+    db.commit()
+    
+    return {
+        "message": "Processing cancelled successfully",
+        "source_id": str(source_id),
+        "task_id": task_id
+    }
+
+
+@router.get("/stats")
+def get_knowledge_base_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get knowledge base statistics
+    
+    - Returns actual counts from database
+    - Includes sources by status and category
+    - Returns total chunks count
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_id = current_user.org_memberships[0].org_id
+    
+    # Get total sources count
+    total_sources = db.query(func.count(KnowledgeSource.id)).filter(
+        KnowledgeSource.org_id == org_id
+    ).scalar() or 0
+    
+    # Get sources by status
+    sources_by_status = dict(
+        db.query(
+            KnowledgeSource.status,
+            func.count(KnowledgeSource.id)
+        ).filter(
+            KnowledgeSource.org_id == org_id
+        ).group_by(KnowledgeSource.status).all()
+    )
+    
+    # Get sources by category
+    sources_by_category = dict(
+        db.query(
+            KnowledgeSource.category,
+            func.count(KnowledgeSource.id)
+        ).filter(
+            KnowledgeSource.org_id == org_id
+        ).group_by(KnowledgeSource.category).all()
+    )
+    
+    # Get total chunks count
+    total_chunks = db.query(func.count(KBChunk.id)).filter(
+        KBChunk.org_id == org_id
+    ).scalar() or 0
+    
+    return {
+        "total_sources": total_sources,
+        "sources_by_status": sources_by_status,
+        "sources_by_category": sources_by_category,
+        "total_chunks": total_chunks
+    }
+

@@ -15,9 +15,9 @@ class LLMService:
     """Service for interacting with Ollama LLM"""
     
     def __init__(self):
-        self.base_url = settings.AI_SERVICE_BASE_URL
-        self.model = "llama3.2"  # Default model
-        self.timeout = 120.0  # 2 minutes for complex queries
+        self.base_url = settings.OLLAMA_BASE_URL
+        self.model = "llama3.2:3b"  # Default model
+        self.timeout = 300.0  # 5 minutes for complex queries
     
     async def generate(
         self,

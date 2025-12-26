@@ -62,6 +62,7 @@ class AnalysisRunStatus(str, enum.Enum):
 class FindingSeverity(str, enum.Enum):
     INFO = "info"
     LOW = "low"
+    WARNING = "warning"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"

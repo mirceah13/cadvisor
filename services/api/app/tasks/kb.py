@@ -59,6 +59,7 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         }
         flag_modified(source, "meta_data")
         db.commit()
+        db.refresh(source)
         
         # Extract text based on source type
         text_content = None
@@ -79,7 +80,7 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
             
         elif source.source_type == "text":
             # Direct text input
-            text_content = source.metadata.get("content", "")
+            text_content = source.meta_data.get("content", "") if source.meta_data else ""
         
         if not text_content or len(text_content) < 50:
             raise ValueError("Insufficient text content extracted")
@@ -94,6 +95,7 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         }
         flag_modified(source, "meta_data")
         db.commit()
+        db.refresh(source)
         
         # Determine chunking strategy
         chunking_strategy = "general"
@@ -142,7 +144,11 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
                 source.status = "failed"
                 source.meta_data = source.meta_data or {}
                 source.meta_data["error"] = str(e)
+                source.meta_data["error_time"] = str(db.query(func.now()).scalar())
+                flag_modified(source, "meta_data")
                 db.commit()
+                db.refresh(source)
+                logger.info(f"Set source {source_id} status to failed")
         except Exception as db_error:
             logger.error(f"Failed to update error status: {db_error}")
         

@@ -198,7 +198,7 @@ class IFCParser:
 
 
 class DXFParser:
-    """Parser for DXF (Drawing Exchange Format) files using ezdxf"""
+    """Parser for DXF and DWG (AutoCAD Drawing) files using ezdxf"""
     
     def __init__(self):
         try:
@@ -210,15 +210,16 @@ class DXFParser:
     
     def parse(self, file_path: str) -> Dict[str, Any]:
         """
-        Parse DXF file and extract metadata
+        Parse DXF or DWG file and extract drawing metadata
         
         Args:
-            file_path: Path to DXF file
+            file_path: Path to DXF or DWG file
             
         Returns:
             Dictionary with extracted metadata
         """
         try:
+            # ezdxf can read both DXF and DWG formats
             doc = self.ezdxf.readfile(file_path)
             
             metadata = {
@@ -458,11 +459,16 @@ class CADParserService:
                     self.ifc_parser = IFCParser()
                 return {"type": "ifc", "data": self.ifc_parser.parse(file_path)}
             
-            # DXF files
+            # DXF and DWG files
             elif "dxf" in mime_type.lower() or file_path.endswith('.dxf'):
                 if not self.dxf_parser:
                     self.dxf_parser = DXFParser()
                 return {"type": "dxf", "data": self.dxf_parser.parse(file_path)}
+            
+            elif "dwg" in mime_type.lower() or "acad" in mime_type.lower() or file_path.endswith('.dwg'):
+                if not self.dxf_parser:
+                    self.dxf_parser = DXFParser()
+                return {"type": "dwg", "data": self.dxf_parser.parse(file_path)}
             
             # Documents
             elif mime_type in ["application/pdf", "application/msword", "text/plain"] or \

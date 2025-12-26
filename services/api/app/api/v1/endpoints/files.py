@@ -3,7 +3,7 @@ File Management API endpoints
 Handles upload, download, and file operations
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -117,7 +117,7 @@ def presign_upload(
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    submission_id: Optional[str] = None,
+    submission_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -338,10 +338,13 @@ def list_files(
             id=f.id,
             filename=f.filename,
             mime_type=f.mime_type,
-            size=f.size,
+            size=f.size_bytes,
+            storage_key=f.storage_key,
             sha256=f.sha256,
             scan_status=f.scan_status,
             uploaded_by=f.uploaded_by,
+            submission_id=f.submission_id,
+            status=f.scan_status or "pending",
             created_at=f.created_at.isoformat()
         )
         for f in files

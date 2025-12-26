@@ -102,7 +102,7 @@ def run_compliance_analysis(
             "status": analysis_run.status,
             "findings_count": len(findings),
             "findings_by_severity": findings_by_severity,
-            "checks_completed": analysis_run.metadata.get("checks_completed", [])
+            "checks_completed": analysis_run.config.get("checks_completed", []) if analysis_run.config else []
         }
     
     except Exception as e:

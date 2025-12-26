@@ -12,6 +12,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      timeout: 30000, // 30 second timeout
     })
 
     this.setupInterceptors()
@@ -21,23 +22,33 @@ class ApiClient {
     // Request interceptor - add auth token
     this.client.interceptors.request.use(
       async (config: InternalAxiosRequestConfig) => {
+        console.log('API Request:', config.method?.toUpperCase(), config.url)
         const session = await getSession()
         
         if (session?.user?.accessToken) {
           config.headers.Authorization = `Bearer ${session.user.accessToken}`
+          console.log('Auth token added to request')
+        } else {
+          console.warn('No session or access token available')
         }
 
         return config
       },
       (error: AxiosError) => {
+        console.error('Request interceptor error:', error)
         return Promise.reject(error)
       }
     )
 
     // Response interceptor - handle errors
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        console.log('API Response:', response.status, response.config.url)
+        return response
+      },
       async (error: AxiosError) => {
+        console.error('API Error:', error.message, error.response?.status, error.config?.url)
+        
         if (error.response?.status === 401) {
           // Unauthorized - redirect to login
           if (typeof window !== 'undefined') {

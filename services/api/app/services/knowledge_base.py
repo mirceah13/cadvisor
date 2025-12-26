@@ -81,6 +81,7 @@ class KnowledgeBaseService:
         }
         flag_modified(source, "meta_data")
         self.db.commit()
+        self.db.refresh(source)
         
         # Generate embeddings and store chunks
         chunks_created = 0
@@ -97,6 +98,7 @@ class KnowledgeBaseService:
             # Create chunk record
             kb_chunk = KBChunk(
                 knowledge_source_id=source_id,
+                org_id=source.org_id,
                 chunk_index=chunk.chunk_index,
                 chunk_text=chunk.text,
                 embedding=embedding,
@@ -111,19 +113,22 @@ class KnowledgeBaseService:
             self.db.add(kb_chunk)
             chunks_created += 1
             
-            # Update progress every 10 chunks or on last chunk
+            # Update progress every 10 chunks or on last chunk (ensure monotonic increase)
             if (i + 1) % 10 == 0 or (i + 1) == total_chunks:
-                source.meta_data["progress"] = {
-                    "stage": "embedding",
-                    "total_chunks": total_chunks,
-                    "processed_chunks": i + 1,
-                    "message": f"Processing chunk {i + 1} of {total_chunks}..."
-                }
-                flag_modified(source, "meta_data")
-                self.db.commit()
+                current_progress = source.meta_data.get("progress", {}).get("processed_chunks", 0)
+                if (i + 1) > current_progress:
+                    source.meta_data["progress"] = {
+                        "stage": "embedding",
+                        "total_chunks": total_chunks,
+                        "processed_chunks": i + 1,
+                        "message": f"Processing chunk {i + 1} of {total_chunks}..."
+                    }
+                    flag_modified(source, "meta_data")
+                    self.db.commit()
+                    self.db.refresh(source)
         
         # Update source status
-        source.status = "ready"
+        source.status = "indexed"
         source.meta_data = source.meta_data or {}
         source.meta_data["chunks_count"] = chunks_created
         source.meta_data["progress"] = {
@@ -135,8 +140,9 @@ class KnowledgeBaseService:
         flag_modified(source, "meta_data")
         
         self.db.commit()
+        self.db.refresh(source)
         
-        logger.info(f"Ingested {chunks_created} chunks for source {source_id}")
+        logger.info(f"Ingested {chunks_created} chunks for source {source_id} - Status: {source.status}")
         return chunks_created
     
     async def semantic_search(
@@ -145,7 +151,7 @@ class KnowledgeBaseService:
         org_id: UUID,
         limit: int = 5,
         category: Optional[str] = None,
-        min_similarity: float = 0.7
+        min_similarity: float = 0.5
     ) -> List[Dict[str, Any]]:
         """
         Semantic search over knowledge base
@@ -167,35 +173,33 @@ class KnowledgeBaseService:
             logger.error("Failed to generate query embedding")
             return []
         
-        # Build query
+        # Build query with similarity calculation
+        similarity_expr = (1 - KBChunk.embedding.cosine_distance(query_embedding))
+        
         query_obj = self.db.query(
             KBChunk.id,
-            KBChunk.content,
+            KBChunk.chunk_text,
             KBChunk.chunk_index,
-            KBChunk.metadata,
+            KBChunk.chunk_metadata,
             KnowledgeSource.title,
             KnowledgeSource.source_type,
             KnowledgeSource.category,
-            # Cosine similarity using pgvector
-            (1 - func.cosine_distance(KBChunk.embedding, query_embedding)).label('similarity')
+            similarity_expr.label('similarity')
         ).join(
             KnowledgeSource,
             KBChunk.knowledge_source_id == KnowledgeSource.id
         ).filter(
             KnowledgeSource.org_id == org_id,
-            KnowledgeSource.status == "ready"
+            KnowledgeSource.status == "indexed",
+            similarity_expr >= min_similarity
         )
         
         # Apply category filter
         if category:
             query_obj = query_obj.filter(KnowledgeSource.category == category)
         
-        # Apply similarity threshold and order
-        query_obj = query_obj.having(
-            text(f"similarity >= {min_similarity}")
-        ).order_by(
-            text("similarity DESC")
-        ).limit(limit)
+        # Order by similarity and limit
+        query_obj = query_obj.order_by(similarity_expr.desc()).limit(limit)
         
         results = query_obj.all()
         
@@ -204,7 +208,7 @@ class KnowledgeBaseService:
         for result in results:
             formatted_results.append({
                 "chunk_id": str(result.id),
-                "content": result.content,
+                "content": result.chunk_text,
                 "chunk_index": result.chunk_index,
                 "similarity": float(result.similarity),
                 "source": {
@@ -212,7 +216,7 @@ class KnowledgeBaseService:
                     "type": result.source_type,
                     "category": result.category
                 },
-                "metadata": result.metadata
+                "metadata": result.chunk_metadata or {}
             })
         
         logger.info(f"Found {len(formatted_results)} results for query: {query[:50]}...")
@@ -302,6 +306,12 @@ class KnowledgeBaseService:
         return query.order_by(
             KnowledgeSource.created_at.desc()
         ).limit(limit).offset(offset).all()
+    
+    def get_chunks_count(self, source_id: UUID) -> int:
+        """Get actual count of chunks for a source"""
+        return self.db.query(func.count(KBChunk.id)).filter(
+            KBChunk.knowledge_source_id == source_id
+        ).scalar() or 0
     
     def delete_source(self, source_id: UUID, org_id: UUID) -> bool:
         """Delete knowledge source and all its chunks"""

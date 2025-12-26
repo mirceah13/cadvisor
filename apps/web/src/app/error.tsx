@@ -18,12 +18,12 @@ export default function Error({
   }, [error])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-2xl space-y-8 p-8">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
+      <Card className="w-full max-w-2xl space-y-8 p-8 shadow-xl">
         <div>
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
             <svg
-              className="h-6 w-6 text-red-600"
+              className="h-6 w-6 text-destructive"
               fill="none"
               viewBox="0 0 24 24"
               strokeWidth="1.5"
@@ -36,19 +36,19 @@ export default function Error({
               />
             </svg>
           </div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
+          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-foreground">
             Something went wrong
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className="mt-2 text-center text-sm text-muted-foreground">
             We encountered an error while processing your request.
           </p>
         </div>
 
-        <div className="rounded-md bg-yellow-50 p-4">
+        <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
               <svg
-                className="h-5 w-5 text-yellow-400"
+                className="h-5 w-5 text-yellow-600 dark:text-yellow-400"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -60,15 +60,15 @@ export default function Error({
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
+              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
                 Error Details
               </h3>
-              <div className="mt-2 text-sm text-yellow-700">
+              <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
                 <p className="font-mono text-xs break-all">
                   {error.message || 'An unexpected error occurred'}
                 </p>
                 {error.digest && (
-                  <p className="mt-2 text-xs text-yellow-600">
+                  <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
                     Error ID: {error.digest}
                   </p>
                 )}
@@ -98,9 +98,9 @@ export default function Error({
         </div>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             If this problem persists, please{' '}
-            <Link href="/support" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link href="/support" className="font-medium text-primary hover:text-primary/80 transition-colors">
               contact support
             </Link>
           </p>

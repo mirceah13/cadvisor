@@ -47,6 +47,7 @@ class SubmissionProfileGenerator:
         # Categorize files
         ifc_files = [f for f in files if self._is_ifc(f.mime_type, f.filename)]
         dxf_files = [f for f in files if self._is_dxf(f.mime_type, f.filename)]
+        dwg_files = [f for f in files if self._is_dwg(f.mime_type, f.filename)]
         pdf_files = [f for f in files if f.mime_type == "application/pdf"]
         doc_files = [f for f in files if self._is_document(f.mime_type)]
         
@@ -54,21 +55,22 @@ class SubmissionProfileGenerator:
         profile = {
             "submission_id": str(submission_id),
             "submission_name": submission.name,
-            "building_type": submission.building_type,
+            "building_type": "unknown",  # Will be extracted from files or user input
             "file_composition": {
                 "total_files": len(files),
                 "ifc_count": len(ifc_files),
                 "dxf_count": len(dxf_files),
+                "dwg_count": len(dwg_files),
                 "pdf_count": len(pdf_files),
                 "doc_count": len(doc_files),
                 "has_3d_model": len(ifc_files) > 0,
-                "has_2d_drawings": len(dxf_files) > 0,
+                "has_2d_drawings": len(dxf_files) > 0 or len(dwg_files) > 0,
             },
-            "building": self._extract_building_info(ifc_files, dxf_files),
+            "building": self._extract_building_info(ifc_files, dxf_files + dwg_files),
             "systems": self._detect_systems(ifc_files),
             "elements": self._count_elements(ifc_files),
             "documents": self._categorize_documents(pdf_files, doc_files),
-            "completeness": self._assess_completeness(ifc_files, dxf_files, pdf_files, doc_files),
+            "completeness": self._assess_completeness(ifc_files, dxf_files + dwg_files, pdf_files, doc_files),
         }
         
         return profile
@@ -80,6 +82,11 @@ class SubmissionProfileGenerator:
     def _is_dxf(self, mime_type: str, filename: str) -> bool:
         """Check if file is DXF"""
         return "dxf" in mime_type.lower() or filename.lower().endswith('.dxf')
+    
+    def _is_dwg(self, mime_type: str, filename: str) -> bool:
+        """Check if file is DWG"""
+        return ("dwg" in mime_type.lower() or "acad" in mime_type.lower() or 
+                filename.lower().endswith('.dwg'))
     
     def _is_document(self, mime_type: str) -> bool:
         """Check if file is a document"""

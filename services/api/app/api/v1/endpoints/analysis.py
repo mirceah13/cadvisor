@@ -41,6 +41,7 @@ class AnalysisRunResponse(BaseModel):
     status: str
     findings_count: Optional[int] = None
     checks_completed: List[str] = []
+    error_message: Optional[str] = None
     created_at: str
     
     class Config:
@@ -100,10 +101,11 @@ def start_analysis(
     
     org_id = current_user.org_memberships[0].org_id
     
-    # Verify submission access
-    submission = db.query(Submission).filter(
+    # Verify submission access through project
+    from app.models import Project
+    submission = db.query(Submission).join(Project).filter(
         Submission.id == request.submission_id,
-        Submission.org_id == org_id
+        Project.org_id == org_id
     ).first()
     
     if not submission:
@@ -153,10 +155,11 @@ def get_analysis_runs(
     
     org_id = current_user.org_memberships[0].org_id
     
-    # Verify submission access
-    submission = db.query(Submission).filter(
+    # Verify submission access through project
+    from app.models import Project
+    submission = db.query(Submission).join(Project).filter(
         Submission.id == submission_id,
-        Submission.org_id == org_id
+        Project.org_id == org_id
     ).first()
     
     if not submission:
@@ -174,12 +177,60 @@ def get_analysis_runs(
             id=run.id,
             submission_id=run.submission_id,
             status=run.status,
-            findings_count=run.metadata.get("findings_count") if run.metadata else None,
-            checks_completed=run.metadata.get("checks_completed", []) if run.metadata else [],
+            findings_count=run.total_findings,
+            checks_completed=run.config.get("checks_completed", []) if run.config else [],
+            error_message=run.error_message,
             created_at=run.created_at.isoformat()
         )
         for run in runs
     ]
+
+
+@router.get("/runs/{run_id}", response_model=AnalysisRunResponse)
+def get_analysis_run_detail(
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed information about a specific analysis run
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_id = current_user.org_memberships[0].org_id
+    
+    # Verify access through submission -> project
+    from app.models import Project
+    analysis_run = db.query(AnalysisRun).join(
+        Submission,
+        AnalysisRun.submission_id == Submission.id
+    ).join(
+        Project,
+        Submission.project_id == Project.id
+    ).filter(
+        AnalysisRun.id == run_id,
+        Project.org_id == org_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis run not found"
+        )
+    
+    return AnalysisRunResponse(
+        id=analysis_run.id,
+        submission_id=analysis_run.submission_id,
+        status=analysis_run.status,
+        findings_count=analysis_run.total_findings,
+        checks_completed=analysis_run.config.get("checks_completed", []) if analysis_run.config else [],
+        error_message=analysis_run.error_message,
+        created_at=analysis_run.created_at.isoformat()
+    )
 
 
 @router.get("/submissions/{submission_id}/findings", response_model=List[FindingResponse])
@@ -204,10 +255,11 @@ def get_findings(
     
     org_id = current_user.org_memberships[0].org_id
     
-    # Verify submission access
-    submission = db.query(Submission).filter(
+    # Verify submission access through project
+    from app.models import Project
+    submission = db.query(Submission).join(Project).filter(
         Submission.id == submission_id,
-        Submission.org_id == org_id
+        Project.org_id == org_id
     ).first()
     
     if not submission:
@@ -230,12 +282,12 @@ def get_findings(
             id=f.id,
             severity=f.severity,
             category=f.category,
-            title=f.title,
-            description=f.description,
-            location=f.location,
-            recommendation=f.recommendation,
+            title=f.evidence.get('title', '') if f.evidence else '',
+            description=f.evidence.get('description', f.statement) if f.evidence else f.statement,
+            location=f.evidence.get('location') if f.evidence else None,
+            recommendation=f.evidence.get('recommendation') if f.evidence else None,
             status=f.status,
-            metadata=f.metadata,
+            metadata=f.evidence if f.evidence else {},
             created_at=f.created_at.isoformat()
         )
         for f in findings
@@ -402,3 +454,52 @@ def trigger_reanalysis(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to queue reanalysis: {str(e)}"
         )
+
+
+@router.delete("/runs/{run_id}")
+def delete_analysis_run(
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete an analysis run and its findings
+    
+    - Only accessible by org members
+    - Deletes all associated findings
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_id = current_user.org_memberships[0].org_id
+    
+    # Verify access through submission -> project
+    from app.models import Project
+    analysis_run = db.query(AnalysisRun).join(
+        Submission,
+        AnalysisRun.submission_id == Submission.id
+    ).join(
+        Project,
+        Submission.project_id == Project.id
+    ).filter(
+        AnalysisRun.id == run_id,
+        Project.org_id == org_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis run not found"
+        )
+    
+    # Delete findings first (cascade should handle this, but being explicit)
+    db.query(Finding).filter(Finding.analysis_run_id == run_id).delete()
+    
+    # Delete the analysis run
+    db.delete(analysis_run)
+    db.commit()
+    
+    return {"message": "Analysis run deleted successfully", "id": str(run_id)}

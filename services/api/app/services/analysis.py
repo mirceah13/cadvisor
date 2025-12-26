@@ -50,16 +50,36 @@ class AnalysisEngine:
         if not submission:
             raise ValueError(f"Submission {submission_id} not found")
         
-        # Create analysis run
-        analysis_run = AnalysisRun(
-            submission_id=submission_id,
-            status="running",
-            metadata={
-                "check_types": check_types or [],
-                "ruleset_ids": [str(r) for r in (ruleset_ids or [])]
-            }
-        )
-        self.db.add(analysis_run)
+        # Get org_id from project
+        from app.models import Project
+        project = self.db.query(Project).filter(Project.id == submission.project_id).first()
+        if not project:
+            raise ValueError(f"Project not found for submission {submission_id}")
+        
+        # Check for existing running/failed analysis run to reuse (for retries)
+        analysis_run = self.db.query(AnalysisRun).filter(
+            AnalysisRun.submission_id == submission_id,
+            AnalysisRun.status.in_(["running", "failed"])
+        ).order_by(AnalysisRun.created_at.desc()).first()
+        
+        if analysis_run:
+            # Reuse existing run for retry
+            logger.info(f"Reusing existing analysis run {analysis_run.id} for submission {submission_id}")
+            analysis_run.status = "running"
+            analysis_run.error_message = None
+        else:
+            # Create new analysis run
+            analysis_run = AnalysisRun(
+                submission_id=submission_id,
+                org_id=project.org_id,
+                status="running",
+                config={
+                    "check_types": check_types or [],
+                    "ruleset_ids": [str(r) for r in (ruleset_ids or [])]
+                }
+            )
+            self.db.add(analysis_run)
+        
         self.db.commit()
         self.db.refresh(analysis_run)
         
@@ -67,7 +87,7 @@ class AnalysisEngine:
         
         try:
             # Generate/get submission profile
-            profile = submission.metadata.get("profile") if submission.metadata else None
+            profile = submission.profile if submission.profile else None
             
             if not profile:
                 logger.info("Generating submission profile...")
@@ -93,8 +113,11 @@ class AnalysisEngine:
             
             # Update analysis run
             analysis_run.status = "completed"
-            analysis_run.metadata["findings_count"] = len(all_findings)
-            analysis_run.metadata["checks_completed"] = check_types
+            analysis_run.total_findings = len(all_findings)
+            if analysis_run.config:
+                analysis_run.config["checks_completed"] = check_types
+            else:
+                analysis_run.config = {"checks_completed": check_types}
             
             self.db.commit()
             
@@ -106,8 +129,7 @@ class AnalysisEngine:
             logger.error(f"Analysis run {analysis_run.id} failed: {e}", exc_info=True)
             
             analysis_run.status = "failed"
-            analysis_run.metadata = analysis_run.metadata or {}
-            analysis_run.metadata["error"] = str(e)
+            analysis_run.error_message = str(e)
             self.db.commit()
             
             raise
@@ -121,13 +143,17 @@ class AnalysisEngine:
     ) -> List[Finding]:
         """Run a specific compliance check"""
         
-        # Get submission for org_id
-        submission = self.db.query(Submission).filter(
+        # Get submission with project to access org_id
+        submission = self.db.query(Submission).join(
+            Submission.project
+        ).filter(
             Submission.id == submission_id
         ).first()
         
-        if not submission:
+        if not submission or not submission.project:
             return []
+        
+        org_id = submission.project.org_id
         
         # Build search query based on check type
         query = self._build_check_query(check_type, profile)
@@ -135,10 +161,10 @@ class AnalysisEngine:
         # Retrieve relevant context from knowledge base
         context_chunks = await self.kb_service.semantic_search(
             query=query,
-            org_id=submission.org_id,
+            org_id=org_id,
             limit=5,
             category=self._get_category_for_check(check_type),
-            min_similarity=0.7
+            min_similarity=0.5
         )
         
         logger.info(f"Retrieved {len(context_chunks)} context chunks for {check_type}")
@@ -159,23 +185,24 @@ class AnalysisEngine:
         
         for finding_data in analysis_result.get("findings", []):
             finding = Finding(
-                submission_id=submission_id,
                 analysis_run_id=analysis_run_id,
                 severity=finding_data.get("severity", "info"),
                 category=check_type,
-                title=finding_data.get("title", "")[:255],
-                description=finding_data.get("description", ""),
-                location=None,  # Could be extracted from CAD data
-                recommendation=None,  # Could be generated separately
-                status="open",
-                metadata={
+                statement=finding_data.get("title", "") + ": " + finding_data.get("description", ""),
+                confidence=finding_data.get("confidence", 0.8),
+                evidence={
+                    "title": finding_data.get("title", ""),
+                    "description": finding_data.get("description", ""),
+                    "location": finding_data.get("location"),
+                    "recommendation": finding_data.get("recommendation"),
                     "references": finding_data.get("references", []),
                     "context_sources": [
                         c.get("source", {}).get("title", "Unknown")
                         for c in context_chunks
                     ],
                     "raw_analysis": analysis_result.get("raw_response", "")[:1000]
-                }
+                },
+                status="pending"
             )
             
             self.db.add(finding)
@@ -205,8 +232,8 @@ class AnalysisEngine:
         # Accessibility checks
         check_types.append("accessibility")
         
-        # Check based on building type
-        building_type = submission.building_type or building.get("type", "")
+        # Check based on building type from profile
+        building_type = building.get("type", "") or profile.get("building_type", "unknown")
         
         if building_type in ["residential", "apartment", "multifamily"]:
             check_types.append("residential_code")
@@ -269,12 +296,20 @@ class AnalysisEngine:
     ) -> List[Finding]:
         """Get findings for a submission"""
         
-        query = self.db.query(Finding).filter(
-            Finding.submission_id == submission_id
-        )
-        
+        # Get all analysis runs for this submission if no specific run provided
         if analysis_run_id:
-            query = query.filter(Finding.analysis_run_id == analysis_run_id)
+            query = self.db.query(Finding).filter(
+                Finding.analysis_run_id == analysis_run_id
+            )
+        else:
+            # Get findings from all runs for this submission
+            run_ids = self.db.query(AnalysisRun.id).filter(
+                AnalysisRun.submission_id == submission_id
+            ).all()
+            run_id_list = [r[0] for r in run_ids]
+            query = self.db.query(Finding).filter(
+                Finding.analysis_run_id.in_(run_id_list)
+            )
         
         if severity:
             query = query.filter(Finding.severity == severity)

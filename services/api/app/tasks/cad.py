@@ -255,8 +255,8 @@ def reprocess_all_files(submission_id: str) -> Dict[str, Any]:
         
         cad_files = [
             f for f in files
-            if any(ext in f.filename.lower() for ext in ['.ifc', '.dxf']) or
-               any(mime in f.mime_type.lower() for mime in ['ifc', 'dxf'])
+            if any(ext in f.filename.lower() for ext in ['.ifc', '.dxf', '.dwg']) or
+               any(mime in f.mime_type.lower() for mime in ['ifc', 'dxf', 'dwg', 'acad'])
         ]
         
         # Queue processing tasks

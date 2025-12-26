@@ -23,6 +23,10 @@ ALLOWED_MIME_TYPES = {
     "model/iges",  # IGES
     "image/vnd.dxf",  # DXF
     "application/x-dxf",
+    "application/acad",  # DWG
+    "application/x-acad",  # DWG
+    "application/dwg",  # DWG
+    "image/vnd.dwg",  # DWG
     "model/ifc",  # IFC
     "application/x-ifc",
     # Documents

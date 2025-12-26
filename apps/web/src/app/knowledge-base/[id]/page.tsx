@@ -66,6 +66,7 @@ const categoryLabels: Record<string, string> = {
 const statusColors: Record<string, string> = {
   uploaded: 'bg-blue-500',
   processing: 'bg-yellow-500',
+  indexed: 'bg-green-500',
   ready: 'bg-green-500',
   completed: 'bg-green-500',
   failed: 'bg-red-500'
@@ -143,6 +144,23 @@ export default function KnowledgeBaseDetailPage() {
     } catch (err: any) {
       console.error('Failed to re-ingest:', err)
       setError(err.response?.data?.detail || 'Failed to trigger re-ingestion')
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!accessToken || !source) return
+    if (!confirm('Are you sure you want to stop processing this document?')) return
+
+    try {
+      await apiClient.post(`/kb/sources/${source.id}/cancel`, {}, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+      
+      // Refresh the source data
+      fetchSource()
+    } catch (err: any) {
+      console.error('Failed to cancel:', err)
+      setError(err.response?.data?.detail || 'Failed to cancel processing')
     }
   }
 
@@ -225,7 +243,7 @@ export default function KnowledgeBaseDetailPage() {
                   variant="outline" 
                   className={`${statusColors[source.status] || 'bg-gray-500'} text-white border-0`}
                 >
-                  {source.status === 'ready' ? 'Ready' : source.status.charAt(0).toUpperCase() + source.status.slice(1)}
+                  {source.status === 'indexed' ? 'Ready' : source.status === 'ready' ? 'Ready' : source.status.charAt(0).toUpperCase() + source.status.slice(1)}
                 </Badge>
                 <Badge variant="outline" className="flex items-center gap-1">
                   <FileText className="h-3 w-3" />
@@ -238,10 +256,21 @@ export default function KnowledgeBaseDetailPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              {source.status === 'processing' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  Stop Processing
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleReIngest}
+                disabled={source.status === 'processing'}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Re-process

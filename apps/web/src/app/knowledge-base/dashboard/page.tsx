@@ -53,30 +53,26 @@ export default function KnowledgeBaseDashboardPage() {
 
     try {
       setLoading(true)
-      // Fetch all sources to calculate stats
-      const response: any = await apiClient.get('/kb/sources?limit=1000', {
+      // Use the new dedicated stats endpoint
+      const response: any = await apiClient.get('/kb/stats', {
         headers: { Authorization: `Bearer ${accessToken}` }
       })
       
-      const sources = response.data || response || []
+      const data = response.data || response
       
-      // Calculate stats
-      const byCategory: Record<string, number> = {}
-      const byStatus: Record<string, number> = {}
-      let totalChunks = 0
-      
-      sources.forEach((s: any) => {
-        byCategory[s.category] = (byCategory[s.category] || 0) + 1
-        byStatus[s.status] = (byStatus[s.status] || 0) + 1
-        totalChunks += s.chunks_count || 0
+      // Get recent uploads separately
+      const sourcesResponse: any = await apiClient.get('/kb/sources?limit=5', {
+        headers: { Authorization: `Bearer ${accessToken}` }
       })
       
+      const recentSources = sourcesResponse.data || sourcesResponse || []
+      
       setStats({
-        total_sources: sources.length,
-        sources_by_category: byCategory,
-        sources_by_status: byStatus,
-        total_chunks: totalChunks,
-        recent_uploads: sources.slice(0, 5)
+        total_sources: data.total_sources || 0,
+        sources_by_category: data.sources_by_category || {},
+        sources_by_status: data.sources_by_status || {},
+        total_chunks: data.total_chunks || 0,
+        recent_uploads: recentSources
       })
     } catch (err: any) {
       console.error('Failed to fetch stats:', err)
@@ -163,7 +159,7 @@ export default function KnowledgeBaseDashboardPage() {
             <CheckCircle2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats?.sources_by_status?.ready || 0}</div>
+            <div className="text-3xl font-bold">{(stats?.sources_by_status?.indexed || 0) + (stats?.sources_by_status?.ready || 0)}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Fully processed documents
             </p>

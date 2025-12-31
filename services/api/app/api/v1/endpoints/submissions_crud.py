@@ -40,6 +40,7 @@ class SubmissionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     files_count: int = 0
+    profile: Optional[dict] = None
     
     class Config:
         from_attributes = True
@@ -97,7 +98,8 @@ async def create_submission(
         created_by=submission.created_by,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
-        files_count=files_count
+        files_count=files_count,
+        profile=submission.profile
     )
     
     return response
@@ -160,7 +162,8 @@ async def list_submissions(
             created_by=submission.created_by,
             created_at=submission.created_at,
             updated_at=submission.updated_at,
-            files_count=files_count
+            files_count=files_count,
+            profile=submission.profile
         ))
     
     return response_list
@@ -205,7 +208,8 @@ async def get_submission(
         created_by=submission.created_by,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
-        files_count=files_count
+        files_count=files_count,
+        profile=submission.profile
     )
 
 

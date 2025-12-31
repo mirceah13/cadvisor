@@ -64,9 +64,9 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
             raise ValueError(f"File {file_id} not found")
         
         # Update status
-        file.metadata = file.metadata or {}
-        file.metadata["processing_status"] = "processing"
-        file.metadata["processing_started_at"] = str(file.created_at)
+        file.parsed_metadata = file.parsed_metadata or {}
+        file.parsed_metadata["processing_status"] = "processing"
+        file.parsed_metadata["processing_started_at"] = str(file.created_at)
         db.commit()
         
         # Download file from storage
@@ -74,23 +74,18 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
         file_path = None
         
         try:
-            # Generate download URL
-            download_url = storage.generate_download_url(
-                file.storage_path,
-                expires_in=3600  # 1 hour for processing
-            )
-            
-            # Download file to temp location
+            # Download file directly from MinIO to temp location
             import tempfile
-            import requests
             
             with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
                 file_path = tmp.name
-                response = requests.get(download_url, stream=True)
-                response.raise_for_status()
-                
-                for chunk in response.iter_content(chunk_size=8192):
-                    tmp.write(chunk)
+            
+            # Download directly from MinIO (no presigned URL needed for internal access)
+            storage.client.fget_object(
+                storage.bucket_name,
+                file.storage_key,
+                file_path
+            )
             
             logger.info(f"Downloaded file to {file_path}")
             
@@ -101,17 +96,17 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
             logger.info(f"Successfully parsed file {file_id}, type={file.mime_type}")
             
             # Store parsed metadata
-            file.metadata["parsed_data"] = parsed_data
-            file.metadata["processing_status"] = "completed"
-            file.metadata["processing_completed_at"] = str(file.updated_at)
+            file.parsed_metadata["parsed_data"] = parsed_data
+            file.parsed_metadata["processing_status"] = "completed"
+            file.parsed_metadata["processing_completed_at"] = str(file.updated_at)
             
             # Extract key metrics for quick access
             if "building_info" in parsed_data:
-                file.metadata["building_type"] = parsed_data["building_info"].get("type")
+                file.parsed_metadata["building_type"] = parsed_data["building_info"].get("type")
             if "storeys" in parsed_data:
-                file.metadata["floor_count"] = len(parsed_data["storeys"])
+                file.parsed_metadata["floor_count"] = len(parsed_data["storeys"])
             if "elements" in parsed_data:
-                file.metadata["element_count"] = sum(parsed_data["elements"].values())
+                file.parsed_metadata["element_count"] = sum(parsed_data["elements"].values())
             
             db.commit()
             
@@ -142,9 +137,9 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
         try:
             file = db.query(File).filter(File.id == file_uuid).first()
             if file:
-                file.metadata = file.metadata or {}
-                file.metadata["processing_status"] = "failed"
-                file.metadata["processing_error"] = str(e)
+                file.parsed_metadata = file.parsed_metadata or {}
+                file.parsed_metadata["processing_status"] = "failed"
+                file.parsed_metadata["processing_error"] = str(e)
                 db.commit()
         except Exception as db_error:
             logger.error(f"Failed to update error status: {db_error}")
@@ -194,19 +189,8 @@ def generate_submission_profile(self, submission_id: str) -> Dict[str, Any]:
         generator = SubmissionProfileGenerator(db)
         profile = generator.generate_profile(submission_uuid)
         
-        # Store profile in submission
-        submission.metadata = submission.metadata or {}
-        submission.metadata["profile"] = profile
-        submission.metadata["profile_generated_at"] = str(submission.updated_at)
-        
-        # Update submission status based on completeness
-        completeness_score = profile.get("completeness", {}).get("score", 0)
-        if completeness_score >= 80:
-            submission.metadata["profile_status"] = "complete"
-        elif completeness_score >= 50:
-            submission.metadata["profile_status"] = "partial"
-        else:
-            submission.metadata["profile_status"] = "incomplete"
+        # Store profile directly in submission.profile column
+        submission.profile = profile
         
         db.commit()
         

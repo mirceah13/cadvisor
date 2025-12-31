@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import { FileDetailsTab } from '@/components/file-details-tab'
 import { 
   ArrowLeft, 
   Upload, 
@@ -432,6 +433,7 @@ export default function SubmissionDetailPage() {
         <Tabs defaultValue="files" className="space-y-4">
           <TabsList>
             <TabsTrigger value="files">Files ({files.length})</TabsTrigger>
+            <TabsTrigger value="details">File Details</TabsTrigger>
             <TabsTrigger value="analysis">Analysis</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -511,7 +513,9 @@ export default function SubmissionDetailPage() {
               </CardContent>
             </Card>
           </TabsContent>
-
+          <TabsContent value="details" className="space-y-4">
+            <FileDetailsTab profile={submission?.profile} files={files} />
+          </TabsContent>
           <TabsContent value="analysis" className="space-y-4">
             {/* Analysis in Progress Banner */}
             {analyzing && (

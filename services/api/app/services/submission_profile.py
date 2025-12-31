@@ -99,64 +99,106 @@ class SubmissionProfileGenerator:
     
     def _extract_building_info(self, ifc_files: List[File], dxf_files: List[File]) -> Dict[str, Any]:
         """Extract building information from CAD files"""
-        # Prefer IFC data
-        if ifc_files:
-            # TODO: Parse IFC files from storage
-            # For now, return placeholder
-            return {
-                "source": "ifc",
-                "type": "unknown",
-                "floors": 0,
-                "total_area_sqm": None,
-                "fire_compartments": 0,
-                "exits": 0,
-                "staircases": 0,
-                "status": "parsing_required"
-            }
-        elif dxf_files:
-            return {
-                "source": "dxf",
-                "type": "unknown",
-                "layers_count": 0,
-                "status": "parsing_required"
-            }
-        else:
-            return {
-                "source": "none",
-                "status": "no_cad_files"
-            }
+        # Aggregate from parsed file metadata
+        building_info = {
+            "type": "unknown",
+            "floors": 0,
+            "total_area_sqm": None,
+            "fire_compartments": 0,
+            "exits": 0,
+            "staircases": 0,
+        }
+        
+        # Extract from IFC files
+        for file in ifc_files:
+            if file.parsed_metadata and "parsed_data" in file.parsed_metadata:
+                parsed = file.parsed_metadata["parsed_data"]
+                if parsed.get("type") == "ifc" and "data" in parsed:
+                    ifc_data = parsed["data"]
+                    
+                    # Get building info
+                    if "building" in ifc_data:
+                        building = ifc_data["building"]
+                        if building.get("found"):
+                            building_info["name"] = building.get("name")
+                            building_info["elevation"] = building.get("elevation")
+                    
+                    # Get floor count
+                    if "storeys" in ifc_data:
+                        storeys = ifc_data["storeys"]
+                        building_info["floors"] = max(building_info["floors"], storeys.get("count", 0))
+                    
+                    # Get elements
+                    if "elements" in ifc_data:
+                        elements = ifc_data["elements"]
+                        building_info["exits"] = elements.get("doors", 0)
+                        building_info["staircases"] = elements.get("stairs", 0)
+        
+        # Extract from DXF/DWG files
+        for file in dxf_files:
+            if file.parsed_metadata and "parsed_data" in file.parsed_metadata:
+                parsed = file.parsed_metadata["parsed_data"]
+                if parsed.get("type") in ["dxf", "dwg"] and "data" in parsed:
+                    dxf_data = parsed["data"]
+                    
+                    # Store DXF-specific info
+                    if "layers" in dxf_data:
+                        building_info["layers_count"] = dxf_data["layers"].get("count", 0)
+                    if "entities" in dxf_data:
+                        building_info["entities"] = dxf_data["entities"]
+        
+        return building_info
     
     def _detect_systems(self, ifc_files: List[File]) -> Dict[str, bool]:
         """Detect building systems from IFC"""
-        if not ifc_files:
-            return {
-                "electrical": False,
-                "plumbing": False,
-                "hvac": False,
-                "fire_protection": False,
-                "status": "no_ifc_files"
-            }
-        
-        return {
+        systems = {
             "electrical": False,
             "plumbing": False,
             "hvac": False,
             "fire_protection": False,
-            "status": "parsing_required"
         }
+        
+        # Extract from parsed IFC files
+        for file in ifc_files:
+            if file.parsed_metadata and "parsed_data" in file.parsed_metadata:
+                parsed = file.parsed_metadata["parsed_data"]
+                if parsed.get("type") == "ifc" and "data" in parsed:
+                    ifc_data = parsed["data"]
+                    if "systems" in ifc_data:
+                        file_systems = ifc_data["systems"]
+                        # Merge detected systems
+                        for sys_name in systems.keys():
+                            if file_systems.get(sys_name):
+                                systems[sys_name] = True
+        
+        return systems
     
     def _count_elements(self, ifc_files: List[File]) -> Dict[str, int]:
         """Count building elements from IFC"""
-        if not ifc_files:
-            return {}
-        
-        return {
+        elements = {
             "walls": 0,
             "doors": 0,
             "windows": 0,
             "stairs": 0,
-            "status": "parsing_required"
+            "slabs": 0,
+            "beams": 0,
+            "columns": 0,
         }
+        
+        # Extract from parsed IFC files
+        for file in ifc_files:
+            if file.parsed_metadata and "parsed_data" in file.parsed_metadata:
+                parsed = file.parsed_metadata["parsed_data"]
+                if parsed.get("type") == "ifc" and "data" in parsed:
+                    ifc_data = parsed["data"]
+                    if "elements" in ifc_data:
+                        file_elements = ifc_data["elements"]
+                        # Aggregate counts
+                        for elem_name in elements.keys():
+                            if elem_name in file_elements:
+                                elements[elem_name] += file_elements[elem_name]
+        
+        return elements
     
     def _categorize_documents(self, pdf_files: List[File], doc_files: List[File]) -> Dict[str, Any]:
         """Categorize supporting documents"""

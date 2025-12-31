@@ -238,6 +238,10 @@ class File(Base, TimestampMixin, SoftDeleteMixin):
     scan_status = Column(String(50), nullable=True)
     scan_result = Column(JSONB, nullable=True)
     
+    # Parsed CAD/BIM metadata (from CAD parser)
+    # Column name in DB is 'file_metadata', but we access it as parsed_metadata
+    parsed_metadata = Column('file_metadata', JSONB, nullable=True)
+    
     uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     # Relationships

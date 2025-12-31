@@ -242,9 +242,9 @@ def complete_upload(
     if _is_cad_file(request.mime_type, request.filename):
         try:
             task = process_cad_file.delay(str(file_record.id))
-            # Store task ID in metadata for tracking
-            file_record.metadata = file_record.metadata or {}
-            file_record.metadata["processing_task_id"] = task.id
+            # Store task ID in parsed_metadata for tracking
+            file_record.parsed_metadata = file_record.parsed_metadata or {}
+            file_record.parsed_metadata["processing_task_id"] = task.id
             db.commit()
         except Exception as e:
             # Log error but don't fail upload

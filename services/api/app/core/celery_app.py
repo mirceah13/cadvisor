@@ -29,9 +29,9 @@ celery_app.conf.update(
     worker_max_tasks_per_child=50,
 )
 
-# Task routes
+# Task routes (all tasks go to default queue for now)
 celery_app.conf.task_routes = {
-    "process_cad_file": {"queue": "cad_processing"},
+    #"process_cad_file": {"queue": "cad_processing"},  # Disabled - using default queue
     "generate_submission_profile": {"queue": "default"},
     "reprocess_all_files": {"queue": "default"},
 }

@@ -280,8 +280,18 @@ class DXFParser:
                 # Use converted DXF file
                 file_path = converted_path
             
-            # Parse DXF file with ezdxf
-            doc = self.ezdxf.readfile(file_path)
+            # Parse DXF file with ezdxf (use recovery mode for robustness)
+            try:
+                doc = self.ezdxf.readfile(file_path)
+            except Exception as read_error:
+                logger.warning(f"Standard read failed, trying recovery mode: {read_error}")
+                # Try recovery mode for malformed DXF files
+                from ezdxf import recover
+                doc, auditor = recover.readfile(file_path)
+                if auditor.has_errors:
+                    logger.warning(f"DXF file has {len(auditor.errors)} errors (recovered)")
+                # Note: auditor object may not have 'issues' attribute in all ezdxf versions
+                logger.info("Successfully recovered DXF file using recovery mode")
             
             metadata = {
                 "processing_status": "completed",

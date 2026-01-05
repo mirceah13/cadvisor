@@ -91,24 +91,39 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
             
             # Parse file
             parser = CADParserService()
-            parsed_data = parser.parse_file(file_path, file.mime_type)
+            parsed_result = parser.parse_file(file_path, file.mime_type)
             
             logger.info(f"Successfully parsed file {file_id}, type={file.mime_type}")
             
-            # Store parsed metadata
-            file.parsed_metadata["parsed_data"] = parsed_data
-            file.parsed_metadata["processing_status"] = "completed"
-            file.parsed_metadata["processing_completed_at"] = str(file.updated_at)
+            # Extract actual data from nested structure
+            file_type = parsed_result.get("type", "unknown")
+            parsed_data = parsed_result.get("data", {})
+            
+            # Store parsed metadata - merge with parsed data at top level
+            metadata_dict = file.parsed_metadata or {}
+            metadata_dict["file_type"] = file_type
+            metadata_dict.update(parsed_data)  # Merge parsed CAD/IFC data directly
+            metadata_dict["processing_status"] = "completed"
+            metadata_dict["processing_completed_at"] = str(file.updated_at)
             
             # Extract key metrics for quick access
             if "building_info" in parsed_data:
-                file.parsed_metadata["building_type"] = parsed_data["building_info"].get("type")
+                metadata_dict["building_type"] = parsed_data["building_info"].get("type")
             if "storeys" in parsed_data:
-                file.parsed_metadata["floor_count"] = len(parsed_data["storeys"])
+                metadata_dict["floor_count"] = len(parsed_data["storeys"])
             if "elements" in parsed_data:
-                file.parsed_metadata["element_count"] = sum(parsed_data["elements"].values())
+                metadata_dict["element_count"] = sum(parsed_data["elements"].values())
             
+            # Reassign to trigger SQLAlchemy change detection
+            file.parsed_metadata = metadata_dict
+            logger.info(f"Updating file metadata with {len(metadata_dict)} keys")
+            
+            # Mark as modified and commit
+            from sqlalchemy.orm import attributes
+            attributes.flag_modified(file, "parsed_metadata")
+            db.flush()
             db.commit()
+            logger.info("Successfully committed metadata to database")
             
             # Trigger submission profile regeneration
             if file.submission_id:

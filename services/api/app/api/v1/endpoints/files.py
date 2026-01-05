@@ -58,6 +58,7 @@ class FileResponse(BaseModel):
     submission_id: Optional[UUID]
     status: str
     created_at: str
+    file_metadata: Optional[dict] = Field(None, description="Parsed CAD/BIM metadata")
     
     class Config:
         from_attributes = True
@@ -200,7 +201,8 @@ async def upload_file(
         uploaded_by=file_record.uploaded_by,
         submission_id=file_record.submission_id,
         created_at=str(file_record.created_at),
-        status=file_record.scan_status or "pending"
+        status=file_record.scan_status or "pending",
+        file_metadata=file_record.parsed_metadata
     )
 
 @router.post("/complete-upload", response_model=FileResponse)
@@ -254,11 +256,14 @@ def complete_upload(
         id=file_record.id,
         filename=file_record.filename,
         mime_type=file_record.mime_type,
-        size=file_record.size,
+        size=file_record.size_bytes,
+        storage_key=file_record.storage_key,
         sha256=file_record.sha256,
-        scan_status=file_record.scan_status,
         uploaded_by=file_record.uploaded_by,
-        created_at=file_record.created_at.isoformat()
+        submission_id=file_record.submission_id,
+        status=file_record.scan_status or "pending",
+        created_at=file_record.created_at.isoformat(),
+        file_metadata=file_record.parsed_metadata
     )
 
 
@@ -345,7 +350,8 @@ def list_files(
             uploaded_by=f.uploaded_by,
             submission_id=f.submission_id,
             status=f.scan_status or "pending",
-            created_at=f.created_at.isoformat()
+            created_at=f.created_at.isoformat(),
+            file_metadata=f.parsed_metadata
         )
         for f in files
     ]

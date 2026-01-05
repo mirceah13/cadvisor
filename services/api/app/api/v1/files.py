@@ -53,6 +53,7 @@ class FileResponse(BaseModel):
     scan_status: str
     uploaded_by: UUID
     created_at: str
+    file_metadata: Optional[dict] = Field(None, description="Parsed file metadata (CAD, BIM, etc.)")
     
     class Config:
         from_attributes = True
@@ -158,11 +159,12 @@ def complete_upload(
         id=file_record.id,
         filename=file_record.filename,
         mime_type=file_record.mime_type,
-        size=file_record.size,
+        size=file_record.size_bytes,
         sha256=file_record.sha256,
         scan_status=file_record.scan_status,
         uploaded_by=file_record.uploaded_by,
-        created_at=file_record.created_at.isoformat()
+        created_at=file_record.created_at.isoformat(),
+        file_metadata=file_record.parsed_metadata
     )
 
 
@@ -242,11 +244,12 @@ def list_files(
             id=f.id,
             filename=f.filename,
             mime_type=f.mime_type,
-            size=f.size,
+            size=f.size_bytes,
             sha256=f.sha256,
             scan_status=f.scan_status,
             uploaded_by=f.uploaded_by,
-            created_at=f.created_at.isoformat()
+            created_at=f.created_at.isoformat(),
+            file_metadata=f.parsed_metadata
         )
         for f in files
     ]

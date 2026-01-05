@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { FileDetailsTab } from '@/components/file-details-tab'
+import { AnalysisProgress } from '@/components/analysis-progress'
 import { 
   ArrowLeft, 
   Upload, 
@@ -75,6 +76,7 @@ export default function SubmissionDetailPage() {
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
   const [lastAnalysisStatus, setLastAnalysisStatus] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [runningAnalysisId, setRunningAnalysisId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchSubmission()
@@ -128,14 +130,25 @@ export default function SubmissionDetailPage() {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       const runs = response.data || response || []
-      setAnalysisRuns(runs)
+      
+      // Only update state if data has actually changed
+      const hasChanged = JSON.stringify(runs) !== JSON.stringify(analysisRuns)
+      if (hasChanged) {
+        setAnalysisRuns(runs)
+      }
       
       // Check if any run is in progress
       const runningRun = runs.find((r: AnalysisRun) => r.status === 'running')
       const latestRun = runs[0]
       
       if (runningRun) {
-        setAnalyzing(true)
+        // Only update states if the running analysis ID changed
+        if (runningAnalysisId !== runningRun.id) {
+          setRunningAnalysisId(runningRun.id)
+        }
+        if (!analyzing) {
+          setAnalyzing(true)
+        }
         startPolling()
       } else {
         // Check if analysis just completed
@@ -154,6 +167,7 @@ export default function SubmissionDetailPage() {
         }
         
         setAnalyzing(false)
+        setRunningAnalysisId(null)
         stopPolling()
       }
       
@@ -518,7 +532,7 @@ export default function SubmissionDetailPage() {
           </TabsContent>
           <TabsContent value="analysis" className="space-y-4">
             {/* Analysis in Progress Banner */}
-            {analyzing && (
+            {runningAnalysisId && (
               <Card className="border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-4">
@@ -603,14 +617,35 @@ export default function SubmissionDetailPage() {
                   </div>
                   <Button
                     onClick={handleStartAnalysis}
-                    disabled={files.length === 0 || analyzing}
+                    disabled={files.length === 0 || !!runningAnalysisId}
                   >
                     <Play className="mr-2 h-4 w-4" />
-                    {analyzing ? 'Analyzing...' : 'Run Analysis'}
+                    {runningAnalysisId ? 'Analyzing...' : 'Run Analysis'}
                   </Button>
                 </div>
               </CardHeader>
             </Card>
+
+            {/* Progress Display */}
+            {runningAnalysisId && (
+              <AnalysisProgress 
+                key={runningAnalysisId}
+                runId={runningAnalysisId}
+                onComplete={() => {
+                  setAnalyzing(false)
+                  setRunningAnalysisId(null)
+                  fetchAnalysisRuns()
+                  if (analysisRuns[0]?.id) {
+                    fetchFindings(analysisRuns[0].id)
+                  }
+                }}
+                onError={() => {
+                  setAnalyzing(false)
+                  setRunningAnalysisId(null)
+                  fetchAnalysisRuns()
+                }}
+              />
+            )}
 
             {/* Analysis Runs History */}
             {analysisRuns.length > 0 && (

@@ -99,27 +99,70 @@ class AnalysisEngine:
             
             logger.info(f"Running checks: {check_types}")
             
+            # Initialize progress tracking
+            total_checks = len(check_types)
+            analysis_run.config = {
+                "check_types": check_types,
+                "ruleset_ids": [str(r) for r in (ruleset_ids or [])],
+                "total_checks": total_checks,
+                "checks_completed": [],
+                "progress": 0,
+                "current_step": None
+            }
+            self.db.commit()
+            self.db.refresh(analysis_run)
+            
             # Run each check
             all_findings = []
             
-            for check_type in check_types:
+            for idx, check_type in enumerate(check_types):
+                # Calculate progress range for this check
+                check_start_progress = int((idx / total_checks) * 100)
+                check_end_progress = int(((idx + 1) / total_checks) * 100)
+                progress_range = check_end_progress - check_start_progress
+                
+                # Update progress before starting check (0% of check)
+                config = analysis_run.config.copy()
+                config["current_step"] = check_type
+                config["progress"] = check_start_progress
+                analysis_run.config = config
+                self.db.commit()
+                self.db.refresh(analysis_run)
+                
+                logger.info(f"Running check {idx + 1}/{total_checks}: {check_type} (Progress: {analysis_run.config['progress']}%)")
+                
                 findings = await self._run_check(
                     submission_id=submission_id,
                     profile=profile,
                     check_type=check_type,
-                    analysis_run_id=analysis_run.id
+                    analysis_run_id=analysis_run.id,
+                    progress_callback=lambda sub_progress: self._update_check_progress(
+                        analysis_run, check_start_progress, progress_range, sub_progress
+                    )
                 )
                 all_findings.extend(findings)
+                
+                # Update progress after completing check (100% of check)
+                config = analysis_run.config.copy()
+                completed_checks = config.get("checks_completed", [])
+                if isinstance(completed_checks, int):  # Backwards compatibility
+                    completed_checks = []
+                completed_checks.append(check_type)
+                config["checks_completed"] = completed_checks
+                config["progress"] = check_end_progress
+                analysis_run.config = config
+                self.db.commit()
+                self.db.refresh(analysis_run)
             
-            # Update analysis run
-            analysis_run.status = "completed"
+            config = analysis_run.config.copy()
+            config["current_step"] = "completed"
+            config["progress"] = 100
+            analysis_run.config = config
             analysis_run.total_findings = len(all_findings)
-            if analysis_run.config:
-                analysis_run.config["checks_completed"] = check_types
-            else:
-                analysis_run.config = {"checks_completed": check_types}
+            analysis_run.status = "completed"
             
             self.db.commit()
+            self.db.refresh(analysis_run)
             
             logger.info(f"Analysis run {analysis_run.id} completed with {len(all_findings)} findings")
             
@@ -134,12 +177,32 @@ class AnalysisEngine:
             
             raise
     
+    def _update_check_progress(
+        self,
+        analysis_run: AnalysisRun,
+        check_start_progress: int,
+        progress_range: int,
+        sub_progress: int
+    ):
+        """Update progress within a single check"""
+        # Calculate overall progress: start + (sub_progress% of range)
+        overall_progress = check_start_progress + int((sub_progress / 100) * progress_range)
+        
+        config = analysis_run.config.copy()
+        config["progress"] = overall_progress
+        analysis_run.config = config
+        self.db.commit()
+        self.db.refresh(analysis_run)
+        
+        logger.info(f"Check progress updated to {overall_progress}% (sub: {sub_progress}%)")
+    
     async def _run_check(
         self,
         submission_id: UUID,
         profile: Dict[str, Any],
         check_type: str,
-        analysis_run_id: UUID
+        analysis_run_id: UUID,
+        progress_callback: Optional[callable] = None
     ) -> List[Finding]:
         """Run a specific compliance check"""
         
@@ -169,6 +232,10 @@ class AnalysisEngine:
         
         logger.info(f"Retrieved {len(context_chunks)} context chunks for {check_type}")
         
+        # Update progress: KB retrieval complete (30% of this check)
+        if progress_callback:
+            progress_callback(30)
+        
         # Run LLM analysis
         analysis_result = await self.llm_service.analyze_compliance(
             submission_profile=profile,
@@ -179,6 +246,10 @@ class AnalysisEngine:
         if not analysis_result.get("success"):
             logger.error(f"Check {check_type} failed: {analysis_result.get('error')}")
             return []
+        
+        # Update progress: LLM analysis complete (80% of this check)
+        if progress_callback:
+            progress_callback(80)
         
         # Create finding records
         findings = []

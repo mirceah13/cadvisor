@@ -178,7 +178,11 @@ def get_analysis_runs(
             submission_id=run.submission_id,
             status=run.status,
             findings_count=run.total_findings,
-            checks_completed=run.config.get("checks_completed", []) if run.config else [],
+            checks_completed=(
+                run.config.get("checks_completed", [])
+                if run.config and isinstance(run.config.get("checks_completed"), list)
+                else []
+            ),
             error_message=run.error_message,
             created_at=run.created_at.isoformat()
         )
@@ -230,6 +234,70 @@ def get_analysis_run_detail(
         checks_completed=analysis_run.config.get("checks_completed", []) if analysis_run.config else [],
         error_message=analysis_run.error_message,
         created_at=analysis_run.created_at.isoformat()
+    )
+
+
+class ProgressResponse(BaseModel):
+    """Progress response for running analysis"""
+    status: str
+    progress: int  # 0-100
+    current_step: Optional[str] = None
+    checks_completed: int = 0
+    total_checks: int = 0
+
+
+@router.get("/runs/{run_id}/progress", response_model=ProgressResponse)
+def get_analysis_progress(
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get real-time progress of a running analysis
+    
+    - Returns progress percentage and current step
+    - Poll this endpoint while status is 'running'
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_id = current_user.org_memberships[0].org_id
+    
+    # Verify access through submission -> project
+    from app.models import Project
+    analysis_run = db.query(AnalysisRun).join(
+        Submission,
+        AnalysisRun.submission_id == Submission.id
+    ).join(
+        Project,
+        Submission.project_id == Project.id
+    ).filter(
+        AnalysisRun.id == run_id,
+        Project.org_id == org_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis run not found"
+        )
+    
+    config = analysis_run.config or {}
+    
+    # Get checks_completed as a count (for progress tracking)
+    checks_completed = config.get("checks_completed", 0)
+    if isinstance(checks_completed, list):
+        checks_completed = len(checks_completed)
+    
+    return ProgressResponse(
+        status=analysis_run.status,
+        progress=config.get("progress", 0),
+        current_step=config.get("current_step"),
+        checks_completed=checks_completed,
+        total_checks=config.get("total_checks", 0)
     )
 
 

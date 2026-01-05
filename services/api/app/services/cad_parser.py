@@ -1,12 +1,15 @@
 """
 CAD Parser Service - Extract metadata from CAD/BIM files
-Supports IFC, DXF, and generates SubmissionProfile
+Supports IFC, DXF, DWG (via conversion), and generates SubmissionProfile
 """
 
 import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
 import json
+import subprocess
+import tempfile
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +211,46 @@ class DXFParser:
             logger.error("ezdxf not installed. Install with: pip install ezdxf")
             raise
     
+    def _convert_dwg_to_dxf(self, dwg_path: str) -> Optional[str]:
+        """
+        Convert DWG to DXF using LibreDWG's dwg2dxf utility
+        
+        Args:
+            dwg_path: Path to DWG file
+            
+        Returns:
+            Path to converted DXF file, or None if conversion fails
+        """
+        try:
+            # Create temporary DXF file
+            temp_dir = tempfile.gettempdir()
+            dxf_path = Path(temp_dir) / f"{Path(dwg_path).stem}_converted.dxf"
+            
+            # Run dwg2dxf conversion
+            result = subprocess.run(
+                ["dwg2dxf", "-o", str(dxf_path), dwg_path],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode == 0 and dxf_path.exists():
+                logger.info(f"Successfully converted DWG to DXF: {dxf_path}")
+                return str(dxf_path)
+            else:
+                logger.error(f"DWG conversion failed: {result.stderr}")
+                return None
+                
+        except subprocess.TimeoutExpired:
+            logger.error("DWG conversion timed out after 60 seconds")
+            return None
+        except FileNotFoundError:
+            logger.error("dwg2dxf command not found. Ensure LibreDWG is installed.")
+            return None
+        except Exception as e:
+            logger.error(f"Error converting DWG to DXF: {e}")
+            return None
+    
     def parse(self, file_path: str) -> Dict[str, Any]:
         """
         Parse DXF or DWG file and extract drawing metadata
@@ -218,11 +261,31 @@ class DXFParser:
         Returns:
             Dictionary with extracted metadata
         """
+        converted_path = None
         try:
-            # ezdxf can read both DXF and DWG formats
+            # Check if file is DWG and needs conversion
+            file_ext = Path(file_path).suffix.lower()
+            
+            if file_ext == '.dwg':
+                logger.info(f"DWG file detected, converting to DXF: {file_path}")
+                converted_path = self._convert_dwg_to_dxf(file_path)
+                
+                if not converted_path:
+                    return {
+                        "error": "DWG conversion failed",
+                        "processing_status": "failed",
+                        "message": "Could not convert DWG to DXF. File may be corrupt or use unsupported version."
+                    }
+                
+                # Use converted DXF file
+                file_path = converted_path
+            
+            # Parse DXF file with ezdxf
             doc = self.ezdxf.readfile(file_path)
             
             metadata = {
+                "processing_status": "completed",
+                "source_format": "dwg" if file_ext == '.dwg' else "dxf",
                 "dxf_version": doc.dxfversion,
                 "layers": self._extract_layers(doc),
                 "blocks": self._extract_blocks(doc),
@@ -232,12 +295,23 @@ class DXFParser:
                 "viewport_info": self._extract_viewport_info(doc),
             }
             
-            logger.info(f"Successfully parsed DXF file: {file_path}")
+            logger.info(f"Successfully parsed CAD file: {file_path}")
             return metadata
             
         except Exception as e:
-            logger.error(f"Error parsing DXF file: {e}")
-            raise
+            logger.error(f"Error parsing CAD file: {e}")
+            return {
+                "error": str(e),
+                "processing_status": "failed"
+            }
+        finally:
+            # Clean up temporary converted file
+            if converted_path and Path(converted_path).exists():
+                try:
+                    Path(converted_path).unlink()
+                    logger.debug(f"Cleaned up temporary DXF file: {converted_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temporary file: {e}")
     
     def _extract_layers(self, doc) -> Dict[str, Any]:
         """Extract layer information"""

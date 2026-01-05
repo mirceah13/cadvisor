@@ -57,46 +57,60 @@ export default function KnowledgeBasePage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 space-y-8 p-8 pt-6 container">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight">Knowledge Base</h2>
-            <p className="text-muted-foreground">
-              Manage compliance documents and standards for AI analysis
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <LoadingLink href="/knowledge-base/dashboard">
-                <BarChart3 className="mr-2 h-4 w-4" />
-                View Stats
-              </LoadingLink>
-            </Button>
-            <Button asChild>
-              <LoadingLink href="/knowledge-base/upload">
-                <Plus className="mr-2 h-4 w-4" />
-                Upload Document
-              </LoadingLink>
-            </Button>
+      <div className="flex-1 space-y-0">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/95 to-primary/80 text-white">
+          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+          <div className="container relative py-12 px-8">
+            <div className="flex items-center justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm">
+                    <BookOpen className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h1 className="text-4xl font-bold tracking-tight">Knowledge Base</h1>
+                    <p className="text-white/80 mt-1">
+                      Manage compliance documents and standards for AI analysis
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20" asChild>
+                  <LoadingLink href="/knowledge-base/dashboard">
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    View Stats
+                  </LoadingLink>
+                </Button>
+                <Button className="bg-white text-primary hover:bg-white/90" asChild>
+                  <LoadingLink href="/knowledge-base/upload">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Upload Document
+                  </LoadingLink>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search knowledge base..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+        <div className="container space-y-8 p-8">
+          <div className="flex gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search knowledge base..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </div>
-        </div>
 
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(6)].map((_, i) => (
-              <Card key={i} className="p-6">
+              <Card key={i} className="p-6 hover:shadow-lg transition-shadow">
                 <div className="animate-pulse space-y-3">
                   <div className="h-5 bg-gray-200 rounded w-3/4"></div>
                   <div className="h-4 bg-gray-200 rounded w-full"></div>
@@ -105,26 +119,30 @@ export default function KnowledgeBasePage() {
             ))}
           </div>
         ) : filteredSources.length === 0 && searchQuery === '' ? (
-          <Card className="p-12">
-            <div className="flex flex-col items-center justify-center text-center">
-              <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Upload compliance documents to enhance AI analysis accuracy
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center justify-center">
+              <div className="rounded-full bg-primary/10 p-6 mb-4">
+                <BookOpen className="h-12 w-12 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No documents yet</h3>
+              <p className="text-muted-foreground mb-6 max-w-md">
+                Upload compliance documents to enhance AI analysis accuracy and ensure your submissions meet all requirements
               </p>
-              <Button asChild>
+              <Button className="bg-primary hover:bg-primary/90" asChild>
                 <LoadingLink href="/knowledge-base/upload">
                   <Plus className="mr-2 h-4 w-4" />
-                  Upload Document
+                  Upload Your First Document
                 </LoadingLink>
               </Button>
             </div>
           </Card>
         ) : filteredSources.length === 0 ? (
-          <Card className="p-12">
-            <div className="flex flex-col items-center justify-center text-center">
-              <Search className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No results found</h3>
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center justify-center">
+              <div className="rounded-full bg-muted p-6 mb-4">
+                <Search className="h-12 w-12 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No results found</h3>
               <p className="text-muted-foreground">
                 No documents match "{searchQuery}"
               </p>
@@ -134,22 +152,27 @@ export default function KnowledgeBasePage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredSources.map((source) => (
               <LoadingLink key={source.id} href={`/knowledge-base/${source.id}`}>
-                <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
-                  <div className="space-y-3">
+                <Card className="p-6 hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer group">
+                  <div className="space-y-4">
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <h3 className="font-semibold line-clamp-1">{source.title}</h3>
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="rounded-lg bg-primary/10 p-2.5 group-hover:bg-primary/20 transition-colors">
+                          <FileText className="h-5 w-5 text-primary" />
+                        </div>
+                        <h3 className="font-semibold line-clamp-2 group-hover:text-primary transition-colors">{source.title}</h3>
                       </div>
-                      <Badge variant="outline">{source.type}</Badge>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{source.document_count || 0} documents</span>
-                      <span>
-                        {formatDistanceToNow(new Date(source.created_at), {
-                          addSuffix: true,
-                        })}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="font-normal">{source.type}</Badge>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{source.document_count || 0} docs</span>
+                        <span>•</span>
+                        <span>
+                          {formatDistanceToNow(new Date(source.created_at), {
+                            addSuffix: true,
+                          }).replace('about ', '')}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -157,6 +180,7 @@ export default function KnowledgeBasePage() {
             ))}
           </div>
         )}
+        </div>
       </div>
     </>
   )

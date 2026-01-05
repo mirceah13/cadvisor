@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { DashboardNav } from '@/components/dashboard-nav'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { apiClient } from '@/lib/api-client'
 import { useAuth } from '@/hooks/use-auth'
@@ -167,147 +168,161 @@ export default function KnowledgeBaseDetailPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="mb-6">
-          <Skeleton className="h-10 w-48 mb-4" />
-          <Skeleton className="h-6 w-96" />
+      <>
+        <DashboardNav />
+        <div className="container mx-auto p-6">
+          <div className="mb-6">
+            <Skeleton className="h-10 w-48 mb-4" />
+            <Skeleton className="h-6 w-96" />
+          </div>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-8 w-3/4 mb-2" />
+              <Skeleton className="h-4 w-1/2" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-40 w-full" />
+            </CardContent>
+          </Card>
         </div>
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-8 w-3/4 mb-2" />
-            <Skeleton className="h-4 w-1/2" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-40 w-full" />
-          </CardContent>
-        </Card>
-      </div>
+      </>
     )
   }
 
   if (error || !source) {
     return (
-      <div className="container mx-auto p-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/knowledge-base')}
-          className="mb-6"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Knowledge Base
-        </Button>
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <AlertCircle className="h-5 w-5" />
-              Error
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-red-600">{error || 'Knowledge source not found'}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <>
+        <DashboardNav />
+        <div className="container mx-auto p-6">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/knowledge-base')}
+            className="mb-6"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Knowledge Base
+          </Button>
+          <Card className="border-red-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="h-5 w-5" />
+                Error
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-red-600">{error || 'Knowledge source not found'}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="container mx-auto p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/knowledge-base')}
-          className="mb-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Knowledge Base
-        </Button>
-        <h1 className="text-3xl font-bold">Knowledge Source Details</h1>
-        <p className="text-muted-foreground mt-2">
-          View and manage this knowledge base document
-        </p>
-      </div>
-
-      {/* Main Content */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <CardTitle className="text-2xl mb-2">{source.title}</CardTitle>
-              <CardDescription className="flex flex-wrap gap-3 mt-3">
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Tag className="h-3 w-3" />
-                  {categoryLabels[source.category] || source.category}
-                </Badge>
-                <Badge 
-                  variant="outline" 
-                  className={`${statusColors[source.status] || 'bg-gray-500'} text-white border-0`}
-                >
-                  {source.status === 'indexed' ? 'Ready' : source.status === 'ready' ? 'Ready' : source.status.charAt(0).toUpperCase() + source.status.slice(1)}
-                </Badge>
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <FileText className="h-3 w-3" />
-                  {source.source_type}
-                </Badge>
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {new Date(source.created_at).toLocaleDateString()}
-                </Badge>
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              {source.status === 'processing' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancel}
-                  className="border-red-300 text-red-600 hover:bg-red-50"
-                >
-                  Stop Processing
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleReIngest}
-                disabled={source.status === 'processing'}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Re-process
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+    <>
+      <DashboardNav />
+      <div className="flex-1 space-y-0">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/95 to-primary/80 text-white">
+          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+          <div className="container relative py-8 px-6">
+            <Button
+              variant="ghost"
+              onClick={() => router.push('/knowledge-base')}
+              className="mb-4 text-white hover:bg-white/10 hover:text-white"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Knowledge Base
+            </Button>
+            
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-4 flex-1">
+                <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm">
+                  <FileText className="h-8 w-8" />
+                </div>
+                <div className="space-y-3">
+                  <h1 className="text-3xl font-bold tracking-tight">{source.title}</h1>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="bg-white/10 border-white/20 text-white">
+                      <Tag className="h-3 w-3 mr-1" />
+                      {categoryLabels[source.category] || source.category}
+                    </Badge>
+                    <Badge 
+                      variant="outline" 
+                      className={`${statusColors[source.status] || 'bg-gray-500'} text-white border-0`}
+                    >
+                      {source.status === 'indexed' ? 'Ready' : source.status === 'ready' ? 'Ready' : source.status.charAt(0).toUpperCase() + source.status.slice(1)}
+                    </Badge>
+                    <Badge variant="outline" className="bg-white/10 border-white/20 text-white">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {new Date(source.created_at).toLocaleDateString()}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {source.status === 'processing' && (
                   <Button
-                    variant="destructive"
+                    variant="outline"
                     size="sm"
-                    disabled={deleting}
+                    onClick={handleCancel}
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
+                    Stop Processing
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Knowledge Source</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete this knowledge source? This will remove
-                      the document and all associated chunks. This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                )}
+                {(source.status === 'indexed' || source.status === 'ready' || source.status === 'completed') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleReIngest}
+                    disabled={source.status === 'processing'}
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Re-process
+                  </Button>
+                )}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={deleting}
+                      className="bg-red-500/10 border-red-300/20 text-white hover:bg-red-500/20"
+                    >
+                      {deleting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Knowledge Source</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete this knowledge source? This will remove
+                        the document and all associated chunks. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
+        </div>
+
+        <div className="container space-y-6 p-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="space-y-6">
             {/* Processing Progress */}
             {source.status === 'processing' && source.meta_data?.progress && (
               <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-200">
@@ -482,9 +497,11 @@ export default function KnowledgeBaseDetailPage() {
                 </div>
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </>
   )
 }

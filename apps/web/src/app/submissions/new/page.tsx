@@ -155,22 +155,46 @@ export default function NewSubmissionPage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 p-8 pt-6 container max-w-2xl">
-        <Button variant="ghost" size="sm" asChild className="mb-4">
-          <LoadingLink href="/submissions">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Submissions
-          </LoadingLink>
-        </Button>
+      <div className="flex-1 space-y-0">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/95 to-primary/80 text-white">
+          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+          <div className="container relative py-8 px-6">
+            <Button 
+              variant="ghost" 
+              onClick={() => router.push('/submissions')}
+              className="mb-4 text-white hover:bg-white/10 hover:text-white"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Submissions
+            </Button>
+            
+            <div className="flex items-center gap-4">
+              <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm">
+                <Upload className="h-8 w-8" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Create New Submission</h1>
+                <p className="text-white/80 mt-1">
+                  Upload CAD files for automated compliance analysis
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Submission</CardTitle>
-            <CardDescription>
-              Create a new CAD submission for compliance analysis
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <div className="container max-w-3xl p-8">
+          <Card className="border-2">
+            <CardHeader className="bg-gradient-to-br from-primary/5 to-primary/10">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Submission Details
+              </CardTitle>
+              <CardDescription>
+                Provide information about your submission for better organization and analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="name">Submission Name *</Label>
@@ -238,7 +262,7 @@ export default function NewSubmissionPage() {
 
               <div className="space-y-2">
                 <Label>CAD Files (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
                   <input
                     type="file"
                     id="file-upload"
@@ -249,13 +273,15 @@ export default function NewSubmissionPage() {
                   />
                   <label
                     htmlFor="file-upload"
-                    className="cursor-pointer flex flex-col items-center gap-2"
+                    className="cursor-pointer flex flex-col items-center gap-3"
                   >
-                    <Upload className="h-10 w-10 text-muted-foreground" />
+                    <div className="rounded-full bg-primary/10 p-4">
+                      <Upload className="h-8 w-8 text-primary" />
+                    </div>
                     <div>
-                      <p className="text-sm font-medium">Click to upload files</p>
+                      <p className="text-sm font-medium">Click to upload or drag and drop</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Supported formats: DWG, DXF, IFC, PDF
+                        DWG, DXF, IFC, PDF up to 50MB each
                       </p>
                     </div>
                   </label>
@@ -263,43 +289,66 @@ export default function NewSubmissionPage() {
 
                 {selectedFiles.length > 0 && (
                   <div className="mt-4 space-y-2">
-                    <p className="text-sm font-medium">Selected files ({selectedFiles.length}):</p>
-                    {selectedFiles.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/50"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-sm truncate">{file.name}</span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index)}
-                          className="flex-shrink-0"
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Selected files</p>
+                      <Badge variant="secondary">{selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</Badge>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {selectedFiles.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="rounded-lg bg-primary/10 p-2">
+                              <FileText className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFile(index)}
+                            className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   You can also upload files after creating the submission
                 </p>
               </div>
 
-              <div className="flex gap-3">
-                <Button type="submit" disabled={loading || uploading}>
+              <div className="flex gap-3 pt-4 border-t">
+                <Button 
+                  type="submit" 
+                  disabled={loading || uploading}
+                  className="bg-primary hover:bg-primary/90 flex-1"
+                  size="lg"
+                >
                   {(loading || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {uploading ? 'Uploading Files...' : 'Create Submission'}
+                  {uploading ? 'Uploading Files...' : loading ? 'Creating...' : 'Create Submission'}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => router.back()}>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => router.back()}
+                  disabled={loading || uploading}
+                  size="lg"
+                >
                   Cancel
                 </Button>
               </div>

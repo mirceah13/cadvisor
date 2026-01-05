@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { LoadingLink } from '@/components/loading-link'
+import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/theme-toggle'
 
@@ -9,9 +10,9 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">CADVisor</h1>
-          </div>
+          <LoadingLink href="/" className="flex items-center">
+            <Logo width={36} height={36} showText={true} />
+          </LoadingLink>
           <nav className="flex items-center gap-4">
             <ThemeToggle />
             <Button variant="ghost" asChild>
@@ -31,6 +32,9 @@ export default function Home() {
             <div className="absolute h-full w-full bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:16px_16px]"></div>
           </div>
           <div className="mx-auto max-w-4xl text-center">
+            <div className="flex justify-center mb-8">
+              <Logo width={80} height={80} showText={false} />
+            </div>
             <div className="mb-8 inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-medium">
               🚀 AI-Powered Building Compliance Platform
             </div>

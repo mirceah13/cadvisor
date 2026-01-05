@@ -1,6 +1,7 @@
 'use client'
 
 import { LoadingLink } from '@/components/loading-link'
+import { Logo } from '@/components/logo'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -34,8 +35,8 @@ export function DashboardNav() {
   return (
     <div className="border-b">
       <div className="flex h-16 items-center px-4 container">
-        <LoadingLink href="/dashboard" className="flex items-center space-x-2 mr-6">
-          <span className="font-bold text-xl">CADVisor</span>
+        <LoadingLink href="/dashboard" className="flex items-center mr-6">
+          <Logo width={32} height={32} showText={true} />
         </LoadingLink>
         <nav className="flex items-center space-x-4 lg:space-x-6 flex-1">
           {navigation.map((item) => {

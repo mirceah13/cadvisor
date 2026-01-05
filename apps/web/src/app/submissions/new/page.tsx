@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { DashboardNav } from '@/components/dashboard-nav'
@@ -13,9 +14,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArrowLeft, Loader2, Upload, X, FileText } from 'lucide-react'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 
 export default function NewSubmissionPage() {
-  const router = useRouter()
+  const router = useLoadingRouter()
   const searchParams = useSearchParams()
   const { accessToken } = useAuth()
   
@@ -155,10 +157,10 @@ export default function NewSubmissionPage() {
       <DashboardNav />
       <div className="flex-1 p-8 pt-6 container max-w-2xl">
         <Button variant="ghost" size="sm" asChild className="mb-4">
-          <Link href="/submissions">
+          <LoadingLink href="/submissions">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Submissions
-          </Link>
+          </LoadingLink>
         </Button>
 
         <Card>
@@ -308,3 +310,4 @@ export default function NewSubmissionPage() {
     </>
   )
 }
+

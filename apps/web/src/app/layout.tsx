@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { LoadingBar } from '@/components/loading-bar'
+import { GlobalLoadingSpinner } from '@/components/global-loading-spinner'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -29,6 +30,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <LoadingBar />
+            <GlobalLoadingSpinner />
             {children}
             <Toaster />
           </ThemeProvider>

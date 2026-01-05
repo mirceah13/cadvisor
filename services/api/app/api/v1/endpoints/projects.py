@@ -37,12 +37,13 @@ class ProjectResponse(BaseModel):
     org_id: UUID
     created_at: datetime
     updated_at: datetime
+    _count: dict | None = None
     
     class Config:
         from_attributes = True
 
 
-@router.get("", response_model=List[ProjectResponse])
+@router.get("")
 async def list_projects(
     skip: int = 0,
     limit: int = 100,
@@ -61,11 +62,34 @@ async def list_projects(
             detail="User is not a member of any organization"
         )
     
+    # Get projects with submission counts
     projects = db.query(Project).filter(
         Project.org_id == org_member.org_id
     ).offset(skip).limit(limit).all()
     
-    return projects
+    # Add submission counts
+    result = []
+    for project in projects:
+        project_dict = {
+            'id': str(project.id),
+            'name': project.name,
+            'description': project.description,
+            'building_type': project.building_type,
+            'org_id': str(project.org_id),
+            'created_at': project.created_at.isoformat(),
+            'updated_at': project.updated_at.isoformat(),
+        }
+        
+        # Count submissions for this project (non-deleted only)
+        submission_count = db.query(func.count(Submission.id)).filter(
+            Submission.project_id == project.id,
+            Submission.is_deleted == False
+        ).scalar() or 0
+        
+        project_dict['_count'] = {'submissions': submission_count}
+        result.append(project_dict)
+    
+    return result
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)

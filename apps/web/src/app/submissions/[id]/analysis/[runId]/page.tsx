@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { DashboardNav } from '@/components/dashboard-nav'
@@ -37,7 +38,7 @@ interface Finding {
 
 export default function AnalysisDetailPage() {
   const params = useParams()
-  const router = useRouter()
+  const router = useLoadingRouter()
   const { accessToken } = useAuth()
   
   const [analysisRun, setAnalysisRun] = useState<AnalysisRun | null>(null)

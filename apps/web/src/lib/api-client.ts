@@ -117,3 +117,50 @@ export const api = {
   upload: <T>(url: string, formData: FormData, onProgress?: (progress: number) => void) =>
     apiClient.upload<T>(url, formData, onProgress),
 }
+
+// Dashboard API
+export const dashboardApi = {
+  getStats: () => api.get<DashboardStats>('/dashboard/stats'),
+  getActivity: (limit?: number) => api.get<RecentActivity>(`/dashboard/activity${limit ? `?limit=${limit}` : ''}`),
+}
+
+// Types for dashboard
+export interface DashboardStats {
+  projects: {
+    total: number
+    active: number
+  }
+  submissions: {
+    total: number
+    pending: number
+    analyzed: number
+  }
+  findings: {
+    total: number
+    critical: number
+    high: number
+    medium: number
+    low: number
+    accepted: number
+  }
+  usage: {
+    submissions_this_month: number
+    analyses_today: number
+    storage_mb: number
+  }
+}
+
+export interface ActivityItem {
+  id: string
+  type: string
+  title: string
+  description: string
+  timestamp: string
+  link?: string
+  status?: string
+}
+
+export interface RecentActivity {
+  activities: ActivityItem[]
+}
+

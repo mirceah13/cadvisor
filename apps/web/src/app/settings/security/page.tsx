@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { useAuth } from '@/hooks/use-auth'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api-client'
 
 export default function SecurityPage() {
-  const router = useRouter()
+  const router = useLoadingRouter()
   const { user } = useAuth()
   const [formData, setFormData] = useState({
     currentPassword: '',

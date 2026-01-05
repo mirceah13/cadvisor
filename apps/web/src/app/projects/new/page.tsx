@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -19,9 +19,10 @@ import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 
 export default function NewProjectPage() {
-  const router = useRouter()
+  const router = useLoadingRouter()
   const { accessToken } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -81,10 +82,10 @@ export default function NewProjectPage() {
       <div className="flex-1 space-y-8 p-8 pt-6 container max-w-3xl">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/projects">
+            <LoadingLink href="/projects">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Projects
-            </Link>
+            </LoadingLink>
           </Button>
         </div>
 
@@ -161,7 +162,7 @@ export default function NewProjectPage() {
                 {loading ? 'Creating...' : 'Create Project'}
               </Button>
               <Button type="button" variant="outline" asChild>
-                <Link href="/projects">Cancel</Link>
+                <LoadingLink href="/projects">Cancel</LoadingLink>
               </Button>
             </div>
           </form>
@@ -170,3 +171,4 @@ export default function NewProjectPage() {
     </>
   )
 }
+

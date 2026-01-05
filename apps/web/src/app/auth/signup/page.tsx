@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,7 +11,7 @@ import { Card } from '@/components/ui/card'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function SignupPage() {
-  const router = useRouter()
+  const router = useLoadingRouter()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -113,9 +114,9 @@ export default function SignupPage() {
           </h2>
           <p className="mt-2 text-center text-sm text-muted-foreground">
             Already have an account?{' '}
-            <Link href="/auth/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
+            <LoadingLink href="/auth/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
               Sign in
-            </Link>
+            </LoadingLink>
           </p>
         </div>
 
@@ -239,13 +240,13 @@ export default function SignupPage() {
               />
               <label htmlFor="acceptTerms" className="ml-2 block text-sm text-foreground">
                 I agree to the{' '}
-                <Link href="/terms" className="text-primary hover:text-primary/80 transition-colors">
+                <LoadingLink href="/terms" className="text-primary hover:text-primary/80 transition-colors">
                   Terms of Service
-                </Link>{' '}
+                </LoadingLink>{' '}
                 and{' '}
-                <Link href="/privacy" className="text-primary hover:text-primary/80 transition-colors">
+                <LoadingLink href="/privacy" className="text-primary hover:text-primary/80 transition-colors">
                   Privacy Policy
-                </Link>
+                </LoadingLink>
               </label>
             </div>
           </div>
@@ -271,7 +272,7 @@ export default function SignupPage() {
 
           <div className="mt-6">
             <p className="text-center text-sm text-muted-foreground">
-              Use the <Link href="/auth/login" className="font-medium text-primary hover:text-primary/80 transition-colors">sign in page</Link> to register with Google, Apple, or Microsoft
+              Use the <LoadingLink href="/auth/login" className="font-medium text-primary hover:text-primary/80 transition-colors">sign in page</LoadingLink> to register with Google, Apple, or Microsoft
             </p>
           </div>
         </div>
@@ -279,3 +280,4 @@ export default function SignupPage() {
     </div>
   )
 }
+

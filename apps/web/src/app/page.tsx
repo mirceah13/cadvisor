@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/theme-toggle'
 
@@ -14,10 +15,10 @@ export default function Home() {
           <nav className="flex items-center gap-4">
             <ThemeToggle />
             <Button variant="ghost" asChild>
-              <Link href="/auth/login">Login</Link>
+              <LoadingLink href="/auth/login">Login</LoadingLink>
             </Button>
             <Button asChild>
-              <Link href="/auth/signup">Sign Up</Link>
+              <LoadingLink href="/auth/signup">Sign Up</LoadingLink>
             </Button>
           </nav>
         </div>
@@ -43,10 +44,10 @@ export default function Home() {
             </p>
             <div className="mt-10 flex items-center justify-center gap-4">
               <Button size="lg" asChild className="h-12 px-8">
-                <Link href="/auth/signup">Start Free Trial</Link>
+                <LoadingLink href="/auth/signup">Start Free Trial</LoadingLink>
               </Button>
               <Button size="lg" variant="outline" asChild className="h-12 px-8">
-                <Link href="#features">Learn More</Link>
+                <LoadingLink href="#features">Learn More</LoadingLink>
               </Button>
             </div>
             <p className="mt-6 text-sm text-muted-foreground">
@@ -169,3 +170,4 @@ export default function Home() {
     </div>
   )
 }
+

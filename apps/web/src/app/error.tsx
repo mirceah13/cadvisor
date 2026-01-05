@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -84,15 +85,15 @@ export default function Error({
             </Button>
             
             <Button variant="outline" asChild>
-              <Link href="/">
+              <LoadingLink href="/">
                 Return to home
-              </Link>
+              </LoadingLink>
             </Button>
 
             <Button variant="outline" asChild>
-              <Link href="/auth/login">
+              <LoadingLink href="/auth/login">
                 Go to login
-              </Link>
+              </LoadingLink>
             </Button>
           </div>
         </div>
@@ -100,12 +101,13 @@ export default function Error({
         <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground">
             If this problem persists, please{' '}
-            <Link href="/support" className="font-medium text-primary hover:text-primary/80 transition-colors">
+            <LoadingLink href="/support" className="font-medium text-primary hover:text-primary/80 transition-colors">
               contact support
-            </Link>
+            </LoadingLink>
           </p>
         </div>
       </Card>
     </div>
   )
 }
+

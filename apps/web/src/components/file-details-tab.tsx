@@ -225,7 +225,12 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                   {selectedFile.filename}
                 </CardTitle>
                 <CardDescription>
-                  {(selectedFile.size_bytes / 1024 / 1024).toFixed(2)} MB • {selectedFile.mime_type}
+                  {selectedFile.size_bytes && !isNaN(selectedFile.size_bytes) 
+                    ? `${(selectedFile.size_bytes / 1024 / 1024).toFixed(2)} MB` 
+                    : selectedFile.size 
+                      ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
+                      : 'Size unknown'
+                  } • {selectedFile.mime_type || 'Unknown type'}
                   {metadata.source_format && ` • Source: ${metadata.source_format.toUpperCase()}`}
                 </CardDescription>
               </div>
@@ -426,23 +431,72 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 badge={metadata.layers.count}
                 defaultOpen={true}
               >
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm text-blue-900 dark:text-blue-100">
+                    <strong>What are layers?</strong> Layers organize drawing elements (walls, doors, etc.) into separate groups. Each layer has properties like color and line type.
+                  </p>
+                </div>
                 <div className="space-y-2">
                   {metadata.layers.layers.slice(0, 10).map((layer: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-2 border rounded">
-                      <span className="text-sm font-medium">{layer.name}</span>
+                    <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="p-2 bg-primary/10 rounded">
+                          <Layers className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{layer.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Layer for {layer.name.toLowerCase().includes('wall') ? 'walls' :
+                                       layer.name.toLowerCase().includes('door') ? 'doors' :
+                                       layer.name.toLowerCase().includes('window') ? 'windows' :
+                                       layer.name.toLowerCase().includes('floor') ? 'floors' :
+                                       'drawing elements'}
+                          </p>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
-                        {layer.color && (
-                          <Badge variant="outline" className="text-xs">Color: {layer.color}</Badge>
+                        {layer.color !== undefined && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded">
+                            <div 
+                              className="w-3 h-3 rounded-full border"
+                              style={{ 
+                                backgroundColor: layer.color === 7 ? '#fff' : 
+                                                layer.color === 1 ? '#ff0000' :
+                                                layer.color === 2 ? '#ffff00' :
+                                                layer.color === 3 ? '#00ff00' :
+                                                layer.color === 4 ? '#00ffff' :
+                                                layer.color === 5 ? '#0000ff' :
+                                                layer.color === 6 ? '#ff00ff' :
+                                                '#888'
+                              }}
+                              title={`AutoCAD Color Index: ${layer.color}`}
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              {layer.color === 7 ? 'White' :
+                               layer.color === 1 ? 'Red' :
+                               layer.color === 2 ? 'Yellow' :
+                               layer.color === 3 ? 'Green' :
+                               layer.color === 4 ? 'Cyan' :
+                               layer.color === 5 ? 'Blue' :
+                               layer.color === 6 ? 'Magenta' :
+                               `Color ${layer.color}`}
+                            </span>
+                          </div>
                         )}
                         {layer.linetype && (
-                          <Badge variant="outline" className="text-xs">{layer.linetype}</Badge>
+                          <Badge variant="outline" className="text-xs" title="Line pattern for this layer">
+                            {layer.linetype === 'CONTINUOUS' ? '━━━ Solid' :
+                             layer.linetype === 'DASHED' ? '- - - Dashed' :
+                             layer.linetype === 'DOTTED' ? '··· Dotted' :
+                             layer.linetype}
+                          </Badge>
                         )}
                       </div>
                     </div>
                   ))}
                   {metadata.layers.layers.length > 10 && (
-                    <p className="text-xs text-muted-foreground text-center py-2">
-                      +{metadata.layers.layers.length - 10} more layers (see Raw Data tab)
+                    <p className="text-xs text-muted-foreground text-center py-2 bg-muted/50 rounded">
+                      +{metadata.layers.layers.length - 10} more layers (see Raw Data tab for complete list)
                     </p>
                   )}
                 </div>
@@ -460,6 +514,21 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
 
           {/* Geometry Tab */}
           <TabsContent value="geometry" className="space-y-4">
+            <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-sm mb-1">Understanding Geometry Data</h3>
+                    <p className="text-sm text-muted-foreground">
+                      This tab shows the geometric elements in your CAD file. <strong>Entities</strong> are drawing objects like lines, arcs, and text. 
+                      <strong>Dimensions</strong> show measurements. <strong>Quantities</strong> provide counts of building elements.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {metadata.entities && (
               <CollapsibleSection
                 title="Entity Count"
@@ -467,6 +536,18 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 badge={metadata.entities.total}
                 defaultOpen={true}
               >
+                <div className="mb-3 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Entities</strong> are the basic geometric objects in the drawing. Common types include:
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-4">
+                    <li>• <strong>LINE:</strong> Straight segments connecting two points</li>
+                    <li>• <strong>TEXT:</strong> Text labels and annotations</li>
+                    <li>• <strong>HATCH:</strong> Filled areas with patterns</li>
+                    <li>• <strong>INSERT:</strong> Block references (repeated elements)</li>
+                    <li>• <strong>LWPOLYLINE:</strong> Connected line segments forming shapes</li>
+                  </ul>
+                </div>
                 <DataGrid data={metadata.entities} />
               </CollapsibleSection>
             )}
@@ -477,6 +558,11 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 icon={<Ruler className="h-5 w-5" />}
                 badge={metadata.dimensions.count}
               >
+                <div className="mb-3 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Dimensions</strong> indicate measurements in the drawing, showing distances, angles, and sizes of building elements.
+                  </p>
+                </div>
                 <DataGrid data={metadata.dimensions} />
               </CollapsibleSection>
             )}
@@ -486,6 +572,11 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 title="Quantities"
                 icon={<Calculator className="h-5 w-5" />}
               >
+                <div className="mb-3 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Quantities</strong> provide counts and measurements of building components (walls, doors, windows, etc.) extracted from the model.
+                  </p>
+                </div>
                 <DataGrid data={metadata.quantities} />
               </CollapsibleSection>
             )}
@@ -496,6 +587,11 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 icon={<Building2 className="h-5 w-5" />}
                 badge={metadata.storeys.count}
               >
+                <div className="mb-3 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Storeys</strong> represent building levels/floors in the model, helping organize elements by vertical location.
+                  </p>
+                </div>
                 <DataGrid data={metadata.storeys} />
               </CollapsibleSection>
             )}

@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -71,22 +72,22 @@ export default function AuthErrorPage() {
 
           <div className="flex flex-col gap-3">
             <Button asChild>
-              <Link href="/auth/login">
+              <LoadingLink href="/auth/login">
                 Try signing in again
-              </Link>
+              </LoadingLink>
             </Button>
             
             <Button variant="outline" asChild>
-              <Link href="/">
+              <LoadingLink href="/">
                 Return to home
-              </Link>
+              </LoadingLink>
             </Button>
 
             {(error === 'CredentialsSignin' || error === 'OAuthAccountNotLinked') && (
               <Button variant="outline" asChild>
-                <Link href="/auth/forgot-password">
+                <LoadingLink href="/auth/forgot-password">
                   Reset password
-                </Link>
+                </LoadingLink>
               </Button>
             )}
           </div>
@@ -95,12 +96,13 @@ export default function AuthErrorPage() {
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-600">
             Need help?{' '}
-            <Link href="/support" className="font-medium text-blue-600 hover:text-blue-500">
+            <LoadingLink href="/support" className="font-medium text-blue-600 hover:text-blue-500">
               Contact support
-            </Link>
+            </LoadingLink>
           </p>
         </div>
       </Card>
     </div>
   )
 }
+

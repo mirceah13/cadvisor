@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -34,14 +34,14 @@ export function DashboardNav() {
   return (
     <div className="border-b">
       <div className="flex h-16 items-center px-4 container">
-        <Link href="/dashboard" className="flex items-center space-x-2 mr-6">
+        <LoadingLink href="/dashboard" className="flex items-center space-x-2 mr-6">
           <span className="font-bold text-xl">CADVisor</span>
-        </Link>
+        </LoadingLink>
         <nav className="flex items-center space-x-4 lg:space-x-6 flex-1">
           {navigation.map((item) => {
             const Icon = item.icon
             return (
-              <Link
+              <LoadingLink
                 key={item.name}
                 href={item.href}
                 className={cn(
@@ -53,18 +53,18 @@ export function DashboardNav() {
               >
                 <Icon className="h-4 w-4" />
                 {item.name}
-              </Link>
+              </LoadingLink>
             )
           })}
         </nav>
         <div className="ml-auto flex items-center space-x-4">
           <ThemeToggle />
-          <Link href="/profile">
+          <LoadingLink href="/profile">
             <Button variant="ghost" size="sm" className="gap-2">
               <User className="h-4 w-4" />
               {user?.name || user?.email}
             </Button>
-          </Link>
+          </LoadingLink>
           <Button variant="ghost" size="sm" onClick={() => signOut()} className="gap-2">
             <LogOut className="h-4 w-4" />
             Logout

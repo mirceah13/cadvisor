@@ -2,13 +2,15 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
 export default function LoginPage() {
-  const router = useRouter()
+  const router = useLoadingRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
   const error = searchParams.get('error')
@@ -62,9 +64,9 @@ export default function LoginPage() {
           </h2>
           <p className="mt-2 text-center text-sm text-muted-foreground">
             Or{' '}
-            <Link href="/auth/signup" className="font-medium text-primary hover:text-primary/80 transition-colors">
+            <LoadingLink href="/auth/signup" className="font-medium text-primary hover:text-primary/80 transition-colors">
               create a new account
-            </Link>
+            </LoadingLink>
           </p>
         </div>
 
@@ -126,9 +128,9 @@ export default function LoginPage() {
             </div>
 
             <div className="text-sm">
-              <Link href="/auth/forgot-password" className="font-medium text-primary hover:text-primary/80 transition-colors">
+              <LoadingLink href="/auth/forgot-password" className="font-medium text-primary hover:text-primary/80 transition-colors">
                 Forgot your password?
-              </Link>
+              </LoadingLink>
             </div>
           </div>
 
@@ -218,3 +220,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

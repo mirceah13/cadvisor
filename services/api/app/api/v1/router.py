@@ -3,7 +3,7 @@ API v1 Router - Main router that includes all sub-routers
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, organizations, projects, submissions, submissions_crud, files, analysis, kb, billing, feedback, reports
+from app.api.v1.endpoints import auth, organizations, projects, submissions, submissions_crud, files, analysis, kb, billing, feedback, reports, dashboard
 
 api_router = APIRouter()
 
@@ -19,3 +19,4 @@ api_router.include_router(kb.router, prefix="/kb", tags=["Knowledge Base"])
 api_router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api_router.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])

@@ -29,6 +29,14 @@ class SubmissionUpdate(BaseModel):
     status: Optional[str] = None
 
 
+class FindingsSummary(BaseModel):
+    total: int = 0
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+
+
 class SubmissionResponse(BaseModel):
     id: UUID
     name: str
@@ -40,6 +48,7 @@ class SubmissionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     files_count: int = 0
+    findings_summary: Optional[FindingsSummary] = None
     profile: Optional[dict] = None
     
     class Config:
@@ -99,6 +108,7 @@ async def create_submission(
         created_at=submission.created_at,
         updated_at=submission.updated_at,
         files_count=files_count,
+        findings_summary=None,  # New submission has no findings yet
         profile=submission.profile
     )
     
@@ -127,7 +137,8 @@ async def list_submissions(
     
     # Build query
     query = db.query(Submission).filter(
-        Submission.project_id.in_(project_ids)
+        Submission.project_id.in_(project_ids),
+        Submission.is_deleted == False
     )
     
     if project_id:
@@ -139,7 +150,7 @@ async def list_submissions(
     submissions = query.order_by(desc(Submission.created_at)).offset(skip).limit(limit).all()
     
     # Enhance with files count and project names
-    from app.models import File
+    from app.models import File, Finding, AnalysisRun, FindingSeverity
     response_list = []
     
     for submission in submissions:
@@ -152,6 +163,46 @@ async def list_submissions(
             project = db.query(Project).filter(Project.id == submission.project_id).first()
             project_name = project.name if project else None
         
+        # Get findings summary
+        findings_summary = None
+        analysis_runs = db.query(AnalysisRun).filter(
+            AnalysisRun.submission_id == submission.id
+        ).all()
+        
+        if analysis_runs:
+            run_ids = [run.id for run in analysis_runs]
+            total_findings = db.query(func.count(Finding.id)).filter(
+                Finding.analysis_run_id.in_(run_ids)
+            ).scalar() or 0
+            
+            critical = db.query(func.count(Finding.id)).filter(
+                Finding.analysis_run_id.in_(run_ids),
+                Finding.severity == FindingSeverity.CRITICAL
+            ).scalar() or 0
+            
+            high = db.query(func.count(Finding.id)).filter(
+                Finding.analysis_run_id.in_(run_ids),
+                Finding.severity == FindingSeverity.HIGH
+            ).scalar() or 0
+            
+            medium = db.query(func.count(Finding.id)).filter(
+                Finding.analysis_run_id.in_(run_ids),
+                Finding.severity == FindingSeverity.MEDIUM
+            ).scalar() or 0
+            
+            low = db.query(func.count(Finding.id)).filter(
+                Finding.analysis_run_id.in_(run_ids),
+                Finding.severity == FindingSeverity.LOW
+            ).scalar() or 0
+            
+            findings_summary = FindingsSummary(
+                total=total_findings,
+                critical=critical,
+                high=high,
+                medium=medium,
+                low=low
+            )
+        
         response_list.append(SubmissionResponse(
             id=submission.id,
             name=submission.name,
@@ -163,6 +214,7 @@ async def list_submissions(
             created_at=submission.created_at,
             updated_at=submission.updated_at,
             files_count=files_count,
+            findings_summary=findings_summary,
             profile=submission.profile
         ))
     
@@ -177,7 +229,8 @@ async def get_submission(
 ):
     """Get a specific submission"""
     submission = db.query(Submission).filter(
-        Submission.id == submission_id
+        Submission.id == submission_id,
+        Submission.is_deleted == False
     ).first()
     
     if not submission:
@@ -187,7 +240,7 @@ async def get_submission(
         )
     
     # Get files count
-    from app.models import File
+    from app.models import File, Finding, AnalysisRun, FindingSeverity
     files_count = db.query(func.count(File.id)).filter(
         File.submission_id == submission.id
     ).scalar() or 0
@@ -197,6 +250,46 @@ async def get_submission(
     if submission.project_id:
         project = db.query(Project).filter(Project.id == submission.project_id).first()
         project_name = project.name if project else None
+    
+    # Get findings summary
+    findings_summary = None
+    analysis_runs = db.query(AnalysisRun).filter(
+        AnalysisRun.submission_id == submission.id
+    ).all()
+    
+    if analysis_runs:
+        run_ids = [run.id for run in analysis_runs]
+        total_findings = db.query(func.count(Finding.id)).filter(
+            Finding.analysis_run_id.in_(run_ids)
+        ).scalar() or 0
+        
+        critical = db.query(func.count(Finding.id)).filter(
+            Finding.analysis_run_id.in_(run_ids),
+            Finding.severity == FindingSeverity.CRITICAL
+        ).scalar() or 0
+        
+        high = db.query(func.count(Finding.id)).filter(
+            Finding.analysis_run_id.in_(run_ids),
+            Finding.severity == FindingSeverity.HIGH
+        ).scalar() or 0
+        
+        medium = db.query(func.count(Finding.id)).filter(
+            Finding.analysis_run_id.in_(run_ids),
+            Finding.severity == FindingSeverity.MEDIUM
+        ).scalar() or 0
+        
+        low = db.query(func.count(Finding.id)).filter(
+            Finding.analysis_run_id.in_(run_ids),
+            Finding.severity == FindingSeverity.LOW
+        ).scalar() or 0
+        
+        findings_summary = FindingsSummary(
+            total=total_findings,
+            critical=critical,
+            high=high,
+            medium=medium,
+            low=low
+        )
     
     return SubmissionResponse(
         id=submission.id,
@@ -209,6 +302,7 @@ async def get_submission(
         created_at=submission.created_at,
         updated_at=submission.updated_at,
         files_count=files_count,
+        findings_summary=findings_summary,
         profile=submission.profile
     )
 

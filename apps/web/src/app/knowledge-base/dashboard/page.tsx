@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { apiClient } from '@/lib/api-client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -39,7 +39,7 @@ const categoryLabels: Record<string, string> = {
 }
 
 export default function KnowledgeBaseDashboardPage() {
-  const router = useRouter()
+  const router = useLoadingRouter()
   const { accessToken } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)

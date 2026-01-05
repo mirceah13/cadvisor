@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { LoadingLink } from '@/components/loading-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -66,16 +67,16 @@ export default function KnowledgeBasePage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link href="/knowledge-base/dashboard">
+              <LoadingLink href="/knowledge-base/dashboard">
                 <BarChart3 className="mr-2 h-4 w-4" />
                 View Stats
-              </Link>
+              </LoadingLink>
             </Button>
             <Button asChild>
-              <Link href="/knowledge-base/upload">
+              <LoadingLink href="/knowledge-base/upload">
                 <Plus className="mr-2 h-4 w-4" />
                 Upload Document
-              </Link>
+              </LoadingLink>
             </Button>
           </div>
         </div>
@@ -112,10 +113,10 @@ export default function KnowledgeBasePage() {
                 Upload compliance documents to enhance AI analysis accuracy
               </p>
               <Button asChild>
-                <Link href="/knowledge-base/upload">
+                <LoadingLink href="/knowledge-base/upload">
                   <Plus className="mr-2 h-4 w-4" />
                   Upload Document
-                </Link>
+                </LoadingLink>
               </Button>
             </div>
           </Card>
@@ -132,7 +133,7 @@ export default function KnowledgeBasePage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredSources.map((source) => (
-              <Link key={source.id} href={`/knowledge-base/${source.id}`}>
+              <LoadingLink key={source.id} href={`/knowledge-base/${source.id}`}>
                 <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
@@ -152,7 +153,7 @@ export default function KnowledgeBasePage() {
                     </div>
                   </div>
                 </Card>
-              </Link>
+              </LoadingLink>
             ))}
           </div>
         )}
@@ -160,3 +161,4 @@ export default function KnowledgeBasePage() {
     </>
   )
 }
+

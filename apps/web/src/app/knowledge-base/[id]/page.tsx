@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
+import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { apiClient } from '@/lib/api-client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -74,7 +75,7 @@ const statusColors: Record<string, string> = {
 
 export default function KnowledgeBaseDetailPage() {
   const params = useParams()
-  const router = useRouter()
+  const router = useLoadingRouter()
   const { accessToken } = useAuth()
   const [source, setSource] = useState<KnowledgeSource | null>(null)
   const [loading, setLoading] = useState(true)

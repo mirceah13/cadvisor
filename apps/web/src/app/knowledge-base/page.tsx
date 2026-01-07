@@ -17,9 +17,12 @@ interface KnowledgeSource {
   id: number
   title: string
   type: string
+  source_type?: string
   status: string
   created_at: string
   document_count?: number
+  chunks_count?: number
+  category?: string
 }
 
 export default function KnowledgeBasePage() {
@@ -154,25 +157,25 @@ export default function KnowledgeBasePage() {
               <LoadingLink key={source.id} href={`/knowledge-base/${source.id}`}>
                 <Card className="p-6 hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer group">
                   <div className="space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="rounded-lg bg-primary/10 p-2.5 group-hover:bg-primary/20 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="rounded-lg bg-primary/10 p-2.5 group-hover:bg-primary/20 transition-colors flex-shrink-0">
                           <FileText className="h-5 w-5 text-primary" />
                         </div>
-                        <h3 className="font-semibold line-clamp-2 group-hover:text-primary transition-colors">{source.title}</h3>
+                        <h3 className="font-semibold line-clamp-2 group-hover:text-primary transition-colors flex-1 min-w-0">{source.title}</h3>
                       </div>
+                      <Badge variant="outline" className="font-normal flex-shrink-0">{source.source_type || source.type}</Badge>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="font-normal">{source.type}</Badge>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{source.document_count || 0} docs</span>
-                        <span>•</span>
-                        <span>
-                          {formatDistanceToNow(new Date(source.created_at), {
-                            addSuffix: true,
-                          }).replace('about ', '')}
-                        </span>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>{source.chunks_count || source.document_count || 0} chunks</span>
                       </div>
+                      <span>
+                        {formatDistanceToNow(new Date(source.created_at), {
+                          addSuffix: true,
+                        }).replace('about ', '')}
+                      </span>
                     </div>
                   </div>
                 </Card>

@@ -282,6 +282,7 @@ class KnowledgeSource(Base, TimestampMixin, SoftDeleteMixin):
     # Relationships
     organization = relationship("Organization", back_populates="knowledge_sources")
     chunks = relationship("KBChunk", back_populates="source", cascade="all, delete-orphan")
+    images = relationship("KBImage", back_populates="source", cascade="all, delete-orphan")
     file = relationship("File", foreign_keys=[file_id])
     
     __table_args__ = (
@@ -311,6 +312,46 @@ class KBChunk(Base, TimestampMixin):
     
     __table_args__ = (
         Index('ix_kb_chunk_source_index', knowledge_source_id, chunk_index),
+    )
+
+
+class KBImage(Base, TimestampMixin):
+    """Knowledge base image with visual embedding and OCR text"""
+    __tablename__ = "kb_images"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    knowledge_source_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
+    
+    # Image storage
+    storage_key = Column(String(500), nullable=False)
+    image_hash = Column(String(32), nullable=False, index=True)  # MD5 hash for deduplication
+    image_index = Column(Integer, nullable=False)  # Order in document
+    
+    # Image metadata
+    format = Column(String(10), nullable=False)  # .png, .jpg, etc.
+    content_type = Column(String(50), nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    
+    # OCR extracted text
+    ocr_text = Column(Text, nullable=True)
+    ocr_confidence = Column(Float, nullable=True)
+    ocr_language = Column(String(20), nullable=True)
+    
+    # Visual embedding (CLIP dimension: 512)
+    visual_embedding = Column(Vector(512), nullable=True)
+    
+    # Metadata: page number, annotations, technical specs, etc.
+    image_metadata = Column('metadata', JSONB, nullable=True)
+    
+    # Relationships
+    source = relationship("KnowledgeSource", back_populates="images")
+    
+    __table_args__ = (
+        Index('ix_kb_image_source_index', knowledge_source_id, image_index),
+        Index('ix_kb_image_hash', image_hash),
     )
 
 

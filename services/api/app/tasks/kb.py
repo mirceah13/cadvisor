@@ -97,6 +97,11 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         db.commit()
         db.refresh(source)
         
+        # Extract and process images from document
+        image_count = _process_document_images(source, file, db) if file else 0
+        
+        logger.info(f"Extracted {image_count} images from source {source_id}")
+        
         # Determine chunking strategy
         chunking_strategy = "general"
         if source.category in ["building_code", "fire_safety", "accessibility"]:
@@ -248,3 +253,150 @@ def _extract_text_from_url(url: str) -> str:
     text = '\n'.join(chunk for chunk in chunks if chunk)
     
     return text
+
+
+def _process_document_images(source: 'KnowledgeSource', file: 'File', db) -> int:
+    """
+    Extract and process images from a document
+    
+    Args:
+        source: KnowledgeSource record
+        file: File record
+        db: Database session
+        
+    Returns:
+        Number of images processed
+    """
+    import tempfile
+    import asyncio
+    from app.services.image_extraction import ImageExtractionService
+    from app.services.ocr import OCRService
+    from app.services.visual_embeddings import VisualEmbeddingService
+    from app.services.storage import StorageService
+    from app.models import KBImage
+    from PIL import Image as PILImage
+    
+    try:
+        storage = StorageService()
+        image_extractor = ImageExtractionService()
+        ocr_service = OCRService()
+        visual_embedder = VisualEmbeddingService()
+        
+        # Download file to temp location
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
+            file_path = tmp.name
+        
+        try:
+            storage.download_file_to_path(file.storage_key, file_path)
+            
+            # Extract images
+            extracted_images = image_extractor.extract_images(file_path, file.mime_type)
+            
+            if not extracted_images:
+                logger.info(f"No images found in {file.filename}")
+                return 0
+            
+            logger.info(f"Extracted {len(extracted_images)} images from {file.filename}")
+            
+            # Process each image
+            images_processed = 0
+            
+            for idx, img_data in enumerate(extracted_images):
+                try:
+                    # Save image to temp file for processing
+                    img_temp_path = image_extractor.save_image_to_temp(
+                        img_data['data'],
+                        img_data['format']
+                    )
+                    
+                    # Get image dimensions
+                    try:
+                        with PILImage.open(img_temp_path) as pil_img:
+                            width, height = pil_img.size
+                    except:
+                        width, height = None, None
+                    
+                    # Perform OCR
+                    ocr_result = ocr_service.extract_technical_annotations(img_temp_path)
+                    
+                    # Generate visual embedding
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        visual_embedding = visual_embedder.generate_image_embedding(img_data['data'])
+                    finally:
+                        loop.close()
+                    
+                    # Upload image to MinIO
+                    image_storage_key = f"orgs/{source.org_id}/kb/{source.id}/images/{img_data['hash']}{img_data['format']}"
+                    
+                    from io import BytesIO
+                    storage.client.put_object(
+                        storage.bucket_name,
+                        image_storage_key,
+                        data=BytesIO(img_data['data']),
+                        length=len(img_data['data']),
+                        content_type=img_data['content_type']
+                    )
+                    
+                    # Create KB image record
+                    kb_image = KBImage(
+                        knowledge_source_id=source.id,
+                        org_id=source.org_id,
+                        storage_key=image_storage_key,
+                        image_hash=img_data['hash'],
+                        image_index=idx,
+                        format=img_data['format'],
+                        content_type=img_data['content_type'],
+                        size_bytes=img_data['size'],
+                        width=width,
+                        height=height,
+                        ocr_text=ocr_result.get('text', ''),
+                        ocr_confidence=ocr_result.get('confidence', 0.0),
+                        ocr_language=ocr_result.get('language', 'ron+eng'),
+                        visual_embedding=visual_embedding,
+                        image_metadata={
+                            'source_file': img_data.get('source', 'unknown'),
+                            'page': img_data.get('page'),
+                            'filename': img_data.get('filename'),
+                            'annotations': ocr_result.get('annotations', []),
+                            'word_count': ocr_result.get('word_count', 0)
+                        }
+                    )
+                    
+                    db.add(kb_image)
+                    images_processed += 1
+                    
+                    # Cleanup temp file
+                    try:
+                        import os
+                        os.unlink(img_temp_path)
+                    except:
+                        pass
+                    
+                    # Commit in batches
+                    if images_processed % 10 == 0:
+                        db.commit()
+                        logger.info(f"Processed {images_processed}/{len(extracted_images)} images")
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to process image {idx}: {e}")
+                    continue
+            
+            # Final commit
+            db.commit()
+            
+            logger.info(f"Successfully processed {images_processed} images for source {source.id}")
+            return images_processed
+            
+        finally:
+            # Cleanup downloaded file
+            try:
+                import os
+                os.unlink(file_path)
+            except:
+                pass
+                
+    except Exception as e:
+        logger.error(f"Error processing images: {e}", exc_info=True)
+        return 0

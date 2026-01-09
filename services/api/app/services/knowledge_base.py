@@ -325,9 +325,197 @@ class KnowledgeBaseService:
             KBChunk.knowledge_source_id == source_id
         ).delete()
         
+        # Delete all images
+        from app.models import KBImage
+        self.db.query(KBImage).filter(
+            KBImage.knowledge_source_id == source_id
+        ).delete()
+        
         # Delete source
         self.db.delete(source)
         self.db.commit()
         
         logger.info(f"Deleted knowledge source {source_id}")
         return True
+    
+    async def visual_search(
+        self,
+        query_image_path: str,
+        org_id: UUID,
+        limit: int = 5,
+        category: Optional[str] = None,
+        min_similarity: float = 0.5
+    ) -> List[Dict[str, Any]]:
+        """
+        Visual similarity search using image
+        
+        Args:
+            query_image_path: Path to query image
+            org_id: Organization ID
+            limit: Maximum number of results
+            category: Optional category filter
+            min_similarity: Minimum similarity threshold
+            
+        Returns:
+            List of similar images with metadata
+        """
+        from app.models import KBImage, KnowledgeSource
+        from app.services.visual_embeddings import VisualEmbeddingService
+        
+        visual_embedder = VisualEmbeddingService()
+        
+        # Generate query embedding
+        query_embedding = visual_embedder.generate_image_embedding_from_path(query_image_path)
+        
+        if not query_embedding:
+            logger.error("Failed to generate query image embedding")
+            return []
+        
+        # Build query with similarity calculation
+        similarity_expr = (1 - KBImage.visual_embedding.cosine_distance(query_embedding))
+        
+        query_obj = self.db.query(
+            KBImage.id,
+            KBImage.storage_key,
+            KBImage.ocr_text,
+            KBImage.image_metadata,
+            KBImage.format,
+            KBImage.width,
+            KBImage.height,
+            KnowledgeSource.title,
+            KnowledgeSource.category,
+            similarity_expr.label('similarity')
+        ).join(
+            KnowledgeSource,
+            KBImage.knowledge_source_id == KnowledgeSource.id
+        ).filter(
+            KnowledgeSource.org_id == org_id,
+            KnowledgeSource.status == "indexed",
+            similarity_expr >= min_similarity
+        )
+        
+        # Apply category filter
+        if category:
+            query_obj = query_obj.filter(KnowledgeSource.category == category)
+        
+        # Execute query
+        results = query_obj.order_by(
+            similarity_expr.desc()
+        ).limit(limit).all()
+        
+        # Format results
+        formatted_results = []
+        for result in results:
+            formatted_results.append({
+                'image_id': str(result.id),
+                'storage_key': result.storage_key,
+                'ocr_text': result.ocr_text,
+                'annotations': result.image_metadata.get('annotations', []) if result.image_metadata else [],
+                'format': result.format,
+                'dimensions': {'width': result.width, 'height': result.height} if result.width else None,
+                'source': {
+                    'title': result.title,
+                    'category': result.category
+                },
+                'similarity': float(result.similarity)
+            })
+        
+        logger.info(f"Visual search returned {len(formatted_results)} results")
+        return formatted_results
+    
+    async def hybrid_search(
+        self,
+        text_query: str,
+        org_id: UUID,
+        limit: int = 10,
+        category: Optional[str] = None,
+        include_images: bool = True,
+        min_text_similarity: float = 0.5,
+        min_visual_similarity: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        Hybrid search combining text and visual results
+        
+        Args:
+            text_query: Text search query
+            org_id: Organization ID
+            limit: Maximum total results
+            category: Optional category filter
+            include_images: Whether to include visual search
+            min_text_similarity: Minimum text similarity threshold
+            min_visual_similarity: Minimum visual similarity threshold
+            
+        Returns:
+            Combined search results with text chunks and images
+        """
+        results = {
+            'text_chunks': [],
+            'images': []
+        }
+        
+        # Text search (existing functionality)
+        text_results = await self.semantic_search(
+            query=text_query,
+            org_id=org_id,
+            limit=limit // 2 if include_images else limit,
+            category=category,
+            min_similarity=min_text_similarity
+        )
+        results['text_chunks'] = text_results
+        
+        # Visual search using text description
+        if include_images:
+            from app.models import KBImage, KnowledgeSource
+            from app.services.visual_embeddings import VisualEmbeddingService
+            
+            visual_embedder = VisualEmbeddingService()
+            
+            # Generate query embedding from text (CLIP cross-modal)
+            query_embedding = visual_embedder.generate_text_embedding(text_query)
+            
+            if query_embedding:
+                similarity_expr = (1 - KBImage.visual_embedding.cosine_distance(query_embedding))
+                
+                query_obj = self.db.query(
+                    KBImage.id,
+                    KBImage.storage_key,
+                    KBImage.ocr_text,
+                    KBImage.image_metadata,
+                    KBImage.format,
+                    KnowledgeSource.title,
+                    KnowledgeSource.category,
+                    similarity_expr.label('similarity')
+                ).join(
+                    KnowledgeSource,
+                    KBImage.knowledge_source_id == KnowledgeSource.id
+                ).filter(
+                    KnowledgeSource.org_id == org_id,
+                    KnowledgeSource.status == "indexed",
+                    similarity_expr >= min_visual_similarity
+                )
+                
+                if category:
+                    query_obj = query_obj.filter(KnowledgeSource.category == category)
+                
+                image_results = query_obj.order_by(
+                    similarity_expr.desc()
+                ).limit(limit // 2).all()
+                
+                results['images'] = [
+                    {
+                        'image_id': str(img.id),
+                        'storage_key': img.storage_key,
+                        'ocr_text': img.ocr_text,
+                        'annotations': img.image_metadata.get('annotations', []) if img.image_metadata else [],
+                        'format': img.format,
+                        'source': {
+                            'title': img.title,
+                            'category': img.category
+                        },
+                        'similarity': float(img.similarity)
+                    }
+                    for img in image_results
+                ]
+        
+        logger.info(f"Hybrid search returned {len(results['text_chunks'])} text chunks and {len(results['images'])} images")
+        return results

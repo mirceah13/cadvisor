@@ -14,6 +14,11 @@ RUN apt-get update && apt-get install -y \
     automake \
     libtool \
     texinfo \
+    tesseract-ocr \
+    tesseract-ocr-ron \
+    tesseract-ocr-eng \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install LibreDWG from source for DWG conversion

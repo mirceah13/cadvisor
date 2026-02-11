@@ -10,6 +10,8 @@ import json
 import subprocess
 import tempfile
 import shutil
+import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -211,9 +213,556 @@ class DXFParser:
             logger.error("ezdxf not installed. Install with: pip install ezdxf")
             raise
     
-    def _convert_dwg_to_dxf(self, dwg_path: str) -> Optional[str]:
+    def _clean_dxf_file(self, dxf_path: str) -> tuple[str, int]:
         """
-        Convert DWG to DXF using LibreDWG's dwg2dxf utility
+        Clean up problematic MTEXT entities in DXF file.
+        LibreDWG can put malformed formatting codes in BOTH group code positions AND text values.
+        Uses a three-pass approach to identify and remove all affected entities.
+        
+        Args:
+            dxf_path: Path to DXF file to clean
+            
+        Returns:
+            Tuple of (cleaned_file_path, number_of_entities_removed)
+        """
+        try:
+            cleaned_path = dxf_path.replace('.dxf', '_cleaned.dxf')
+            
+            logger.info(f"Starting DXF cleaning process for: {dxf_path}")
+            
+            with open(dxf_path, 'r', encoding='utf-8', errors='ignore') as infile:
+                lines = infile.readlines()
+            
+            logger.info(f"Scanning {len(lines)} lines for malformed MTEXT patterns...")
+            
+            # PASS 1: Identify all line numbers containing malformed patterns
+            malformed_lines = set()
+            for line_num, line in enumerate(lines):
+                has_problem = False
+                
+                try:
+                    # Look for pipe-based formatting codes
+                    if '|i0' in line or '|c0' in line or ('|p' in line and '|' in line):
+                        has_problem = True
+                    # Look for font codes
+                    elif 'fArial' in line or 'fTimes' in line or 'fSwis' in line:
+                        has_problem = True  
+                    # Look for height/formatting codes with backslash
+                    elif ('\\H' in line and 'x;' in line) or '\\S^' in line or '\\A1{' in line or '\\pql' in line:
+                        has_problem = True
+                    # Look for scientific notation in group code position (LibreDWG bug)
+                    elif ('E-' in line or 'E+' in line) and (line.strip().startswith('-') or line.strip()[0].isdigit()):
+                        has_problem = True
+                    # Look for text names where numbers should be (GENERATED_STYLE, layer names, etc.)
+                    elif line.strip() and line.strip()[0].isalpha() and '_' in line:
+                        # Likely a name appearing where a group code should be
+                        has_problem = True
+                        
+                    if has_problem:
+                        malformed_lines.add(line_num)
+                        if len(malformed_lines) <= 10:  # Log first 10 only
+                            logger.debug(f"Found malformed pattern at line {line_num}: {line.strip()[:150]}")
+                except Exception as line_error:
+                    logger.warning(f"Error checking line {line_num}: {line_error}")
+                    continue
+            
+            logger.info(f"Found {len(malformed_lines)} lines with malformed patterns")
+            
+            # Debug: Show some examples of malformed lines
+            if malformed_lines:
+                logger.info(f"Example malformed line numbers: {sorted(list(malformed_lines))[:10]}")
+            
+            # Note: We intentionally do NOT replace malformed lines directly as this corrupts the DXF structure
+            # Instead, we rely on removing entire malformed MTEXT entities and using recovery mode
+            
+            # PASS 2: Map remaining malformed lines to their MTEXT entity start positions
+            malformed_entities = set()
+            current_entity_start = None
+            in_mtext = False
+            entity_depth = 0
+            
+            for i in range(len(lines)):
+                line = lines[i].strip()
+                
+                # Detect MTEXT entity start
+                if i + 1 < len(lines) and line == '0' and lines[i + 1].strip() == 'MTEXT':
+                    current_entity_start = i
+                    in_mtext = True
+                    entity_depth = 0
+                    logger.debug(f"MTEXT entity starts at line {i}")
+                # Detect next entity start (end of current MTEXT)
+                # Only end MTEXT if we see '0' followed by another entity type
+                elif in_mtext and line == '0':
+                    # Check if next line is a new entity type
+                    if i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        # If it's another entity type (not a data value), end the MTEXT
+                        if next_line in ['MTEXT', 'LINE', 'LWPOLYLINE', 'CIRCLE', 'ARC', 'TEXT', 'INSERT', 
+                                         'POLYLINE', 'DIMENSION', 'HATCH', 'SPLINE', 'ELLIPSE', 'POINT',
+                                         'SOLID', 'TRACE', 'ATTRIB', 'BLOCK', 'ENDBLK', 'SEQEND']:
+                            if current_entity_start is not None:
+                                logger.debug(f"MTEXT entity ends at line {i} (started at {current_entity_start})")
+                            in_mtext = False
+                            current_entity_start = None
+                
+                # If we're in an MTEXT entity and this line is malformed, mark the entity
+                if in_mtext and current_entity_start is not None and i in malformed_lines:
+                    malformed_entities.add(current_entity_start)
+                    logger.debug(f"Marking MTEXT entity at line {current_entity_start} for removal (malformed line {i})")
+            
+            logger.info(f"Identified {len(malformed_entities)} MTEXT entities to remove")
+            
+            # PASS 3: Write output, skipping malformed MTEXT entities and fixing missing subclass markers
+            skipped_count = 0
+            fixed_count = 0
+            i = 0
+            
+            with open(cleaned_path, 'w', encoding='utf-8') as outfile:
+                while i < len(lines):
+                    # Check if this is the start of a malformed MTEXT entity
+                    if i in malformed_entities:
+                        skipped_count += 1
+                        entity_start = i
+                        # Skip '0' and 'MTEXT'
+                        i += 2
+                        # Skip all lines of this entity until next '0' group code
+                        while i < len(lines):
+                            if lines[i].strip() == '0':
+                                # Found start of next entity, don't skip this line
+                                break
+                            i += 1
+                        logger.debug(f"Skipped MTEXT entity starting at line {entity_start}")
+                    # Check if this is a clean MTEXT entity that might be missing subclass markers
+                    elif i + 1 < len(lines) and lines[i].strip() == '0' and lines[i + 1].strip() == 'MTEXT':
+                        # Write the MTEXT entity start
+                        outfile.write(lines[i])     # '0'
+                        outfile.write(lines[i + 1])  # 'MTEXT'
+                        i += 2
+                        
+                        # Check if subclass markers are present in next few lines
+                        has_subclass_marker = False
+                        lookahead_start = i
+                        lookahead_limit = min(i + 20, len(lines))  # Check next 20 lines
+                        
+                        for j in range(lookahead_start, lookahead_limit):
+                            if lines[j].strip() == '100':
+                                has_subclass_marker = True
+                                break
+                            if lines[j].strip() == '0':  # Hit next entity
+                                break
+                        
+                        # If missing subclass markers, add them (required for DXF R13+)
+                        if not has_subclass_marker:
+                            outfile.write('100\n')
+                            outfile.write('AcDbEntity\n')
+                            outfile.write('100\n')
+                            outfile.write('AcDbMText\n')
+                            fixed_count += 1
+                            logger.debug(f"Added missing subclass markers to MTEXT at line {lookahead_start - 2}")
+                        
+                        # Write rest of the entity
+                        while i < len(lines):
+                            if lines[i].strip() == '0':
+                                # Next entity starts, don't write this line yet
+                                break
+                            outfile.write(lines[i])
+                            i += 1
+                    else:
+                        # Write line as-is
+                        outfile.write(lines[i])
+                        i += 1
+            
+            logger.info(f"Cleaned DXF file created: {cleaned_path} (removed {skipped_count} problematic MTEXT entities, fixed {fixed_count} missing subclass markers)")
+            return cleaned_path, skipped_count
+            
+        except Exception as e:
+            logger.error(f"Error cleaning DXF file: {e}", exc_info=True)
+            # Return original path with 0 count if cleaning fails
+            return dxf_path, 0
+    
+    def _translate_dwg_with_aps(self, dwg_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Translate DWG using Autodesk Platform Services (APS) Model Derivative API.
+        Translates to SVF2 format and extracts metadata directly via API.
+        
+        Requires APS_CLIENT_ID and APS_CLIENT_SECRET environment variables.
+        APS (formerly Forge) provides 100% reliable DWG translation supporting ALL versions.
+        
+        Args:
+            dwg_path: Path to DWG file
+            
+        Returns:
+            Dictionary with extracted metadata, or None if translation fails
+        """
+        try:
+            import requests
+            import base64
+            import time
+            from app.core.config import settings
+            
+            # Check for credentials
+            if not settings.APS_CLIENT_ID or not settings.APS_CLIENT_SECRET:
+                logger.debug("APS API credentials not configured")
+                return None
+            
+            # Step 1: Get 2-legged OAuth2 access token
+            auth_url = "https://developer.api.autodesk.com/authentication/v2/token"
+            
+            # Use form-encoded authentication
+            auth_response = requests.post(
+                auth_url,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "client_id": settings.APS_CLIENT_ID,
+                    "client_secret": settings.APS_CLIENT_SECRET,
+                    "grant_type": "client_credentials",
+                    "scope": "data:read data:write data:create bucket:create bucket:read"
+                },
+                timeout=30
+            )
+            
+            if auth_response.status_code != 200:
+                logger.error(f"APS authentication failed: {auth_response.text}")
+                return None
+            
+            access_token = auth_response.json()["access_token"]
+            
+            # Step 2: Upload DWG file using signed URL approach
+            bucket_key = f"cadvisor-temp-{int(time.time())}"
+            object_name = Path(dwg_path).name
+            
+            # Create bucket using OSS v2 API (still supported for bucket creation)
+            bucket_url = "https://developer.api.autodesk.com/oss/v2/buckets"
+            bucket_response = requests.post(
+                bucket_url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                json={"bucketKey": bucket_key, "policyKey": "temporary"},
+                timeout=30
+            )
+            
+            # Bucket might already exist, that's OK
+            if bucket_response.status_code not in [200, 201, 409]:
+                logger.error(f"APS bucket creation failed: {bucket_response.text}")
+                return None
+                
+            # Get signed upload URL
+            signed_url_endpoint = f"https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{object_name}/signeds3upload"
+            signed_response = requests.get(
+                signed_url_endpoint,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30
+            )
+            
+            if signed_response.status_code != 200:
+                logger.error(f"Failed to get signed URL: {signed_response.text}")
+                return None
+                
+            upload_data = signed_response.json()
+            upload_url = upload_data["urls"][0]
+            upload_key = upload_data["uploadKey"]
+            
+            # Upload file to signed S3 URL
+            with open(dwg_path, "rb") as f:
+                s3_response = requests.put(
+                    upload_url,
+                    data=f,
+                    timeout=300
+                )
+                
+                if s3_response.status_code not in [200, 201]:
+                    logger.error(f"S3 upload failed: {s3_response.status_code}")
+                    return None
+            
+            # Complete the upload
+            complete_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{object_name}/signeds3upload"
+            complete_response = requests.post(
+                complete_url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                json={"uploadKey": upload_key},
+                timeout=30
+            )
+            
+            if complete_response.status_code not in [200, 201]:
+                logger.error(f"Failed to complete upload: {complete_response.text}")
+                return None
+            
+            # Generate URN from objectId
+            object_id = complete_response.json()["objectId"]
+            urn = base64.urlsafe_b64encode(object_id.encode()).decode().rstrip("=")
+            
+            # Step 3: Trigger Model Derivative translation job (DWG → SVF2)
+            derivative_url = "https://developer.api.autodesk.com/modelderivative/v2/designdata/job"
+            job_response = requests.post(
+                derivative_url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "x-ads-force": "true"  # Force new translation
+                },
+                json={
+                    "input": {"urn": urn},
+                    "output": {
+                        "formats": [{"type": "svf2", "views": ["2d", "3d"]}]
+                    }
+                },
+                timeout=30
+            )
+            
+            if job_response.status_code not in [200, 201]:
+                logger.error(f"APS translation job failed: {job_response.text}")
+                return None
+            
+            # Step 4: Poll for completion (max 5 minutes)
+            manifest_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest"
+            max_wait = 300  # 5 minutes
+            start_time = time.time()
+            
+            while time.time() - start_time < max_wait:
+                manifest_response = requests.get(
+                    manifest_url,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=30
+                )
+                
+                if manifest_response.status_code == 200:
+                    manifest = manifest_response.json()
+                    status = manifest.get("status")
+                    progress = manifest.get("progress", "")
+                    
+                    logger.debug(f"APS translation status: {status}, progress: {progress}")
+                    
+                    if status == "success":
+                        logger.info(f"APS translation succeeded, extracting metadata via API")
+                        
+                        # Step 5: Extract metadata via APS Metadata API
+                        metadata = self._extract_metadata_from_aps(urn, access_token)
+                        
+                        if metadata:
+                            logger.info(f"Successfully extracted metadata from APS")
+                            return metadata
+                        else:
+                            logger.error("Failed to extract metadata from APS")
+                            return None
+                    
+                    elif status == "failed":
+                        logger.error(f"APS conversion failed: {progress}")
+                        return None
+                    
+                    elif status == "inprogress":
+                        # Continue polling
+                        pass
+                
+                time.sleep(5)
+            
+            logger.error("APS translation timed out after 5 minutes")
+            return None
+            
+        except ImportError:
+            logger.debug("requests library not available for APS API")
+            return None
+        except Exception as e:
+            logger.error(f"APS API error: {e}")
+            return None
+    
+    def _extract_metadata_from_aps(self, urn: str, access_token: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract metadata from translated DWG using APS Metadata API.
+        
+        Args:
+            urn: Base64-encoded URN of the translated file
+            access_token: APS OAuth2 access token
+            
+        Returns:
+            Dictionary with extracted metadata or None
+        """
+        try:
+            import requests
+            
+            # Step 1: List model views (get viewable GUIDs)
+            metadata_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata"
+            views_response = requests.get(
+                metadata_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30
+            )
+            
+            if views_response.status_code != 200:
+                logger.error(f"Failed to get model views: {views_response.text}")
+                return None
+            
+            views_data = views_response.json()
+            metadata_list = views_data.get("data", {}).get("metadata", [])
+            
+            if not metadata_list:
+                logger.warning("No model views found in APS metadata")
+                return {"views": [], "objects": []}
+            
+            # Step 2: Extract properties from all views
+            all_objects = []
+            view_info = []
+            
+            for view in metadata_list:
+                guid = view.get("guid")
+                view_name = view.get("name", "Unnamed")
+                view_role = view.get("role", "unknown")
+                
+                if not guid:
+                    continue
+                
+                view_info.append({
+                    "guid": guid,
+                    "name": view_name,
+                    "role": view_role
+                })
+                
+                # Get all properties for this view with retry logic
+                properties_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata/{guid}/properties"
+                
+                # Retry up to 6 times (30 seconds total) for properties to be ready
+                max_retries = 6
+                retry_delay = 5
+                
+                for attempt in range(max_retries):
+                    props_response = requests.get(
+                        properties_url,
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        timeout=60
+                    )
+                    
+                    if props_response.status_code == 200:
+                        props_data = props_response.json()
+                        objects = props_data.get("data", {}).get("collection", [])
+                        
+                        # Add view context to each object
+                        for obj in objects:
+                            obj["view_name"] = view_name
+                            obj["view_role"] = view_role
+                        
+                        all_objects.extend(objects)
+                        logger.info(f"Extracted {len(objects)} objects from view '{view_name}'")
+                        break  # Success, exit retry loop
+                        
+                    elif props_response.status_code == 202:
+                        # Properties still processing
+                        if attempt < max_retries - 1:
+                            logger.info(f"Properties still processing for view '{view_name}', retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})...")
+                            time.sleep(retry_delay)
+                        else:
+                            logger.warning(f"Properties for view '{view_name}' still not ready after {max_retries} attempts")
+                    else:
+                        logger.warning(f"Failed to get properties for view '{view_name}': {props_response.text}")
+                        break  # Non-retryable error
+            
+            # Step 3: Organize and structure the metadata
+            return self._structure_aps_metadata(all_objects, view_info)
+            
+        except Exception as e:
+            logger.error(f"Error extracting APS metadata: {e}")
+            return None
+    
+    def _structure_aps_metadata(self, objects: list, views: list) -> Dict[str, Any]:
+        """
+        Structure APS metadata into a format compatible with our database schema and frontend.
+        
+        Args:
+            objects: List of objects with properties from APS
+            views: List of model views
+            
+        Returns:
+            Structured metadata dictionary matching frontend expectations
+        """
+        # Extract entities by type and layer information
+        entity_types = {}
+        layer_dict = {}
+        all_properties = []
+        
+        for obj in objects:
+            obj_name = obj.get("name", "Unknown")
+            obj_id = obj.get("objectid")
+            props = obj.get("properties", {})
+            
+            # Map APS object names to DXF-like entity types
+            # Extract entity type from name (e.g., "Line [ABC]" -> "LINE")
+            entity_type = obj_name.split('[')[0].strip().upper()
+            if not entity_type:
+                entity_type = "UNKNOWN"
+            
+            entity_types[entity_type] = entity_types.get(entity_type, 0) + 1
+            
+            # Extract layer information from properties
+            general_props = props.get("General", {})
+            layer_name = general_props.get("Layer")
+            
+            if layer_name:
+                if layer_name not in layer_dict:
+                    layer_dict[layer_name] = {
+                        "name": layer_name,
+                        "color": general_props.get("Color"),
+                        "linetype": general_props.get("Linetype"),
+                        "lineweight": general_props.get("Lineweight")
+                    }
+            
+            # Collect all properties for raw data tab
+            all_properties.append({
+                "objectid": obj_id,
+                "name": obj_name,
+                "type": entity_type,
+                "properties": props,
+                "view": obj.get("view"),
+                "role": obj.get("role")
+            })
+        
+        # Convert layers dict to list
+        layers_list = list(layer_dict.values())
+        
+        # Build structured response matching frontend expectations
+        structured_metadata = {
+            # Status fields (used by Parsing Report tab)
+            "processing_status": "completed",
+            "source_format": "dwg",
+            "extraction_method": "aps_metadata_api",
+            
+            # Entities field (used by Geometry tab - expects "total" field)
+            "entities": {
+                "total": len(objects),
+                **entity_types  # Spread individual entity type counts
+            },
+            
+            # Layers field (used by Building tab - expects "count" and "layers" array)
+            "layers": {
+                "count": len(layers_list),
+                "layers": layers_list[:100]  # Limit to first 100 for display
+            },
+            
+            # Views from APS (2D/3D model views)
+            "views": {
+                "count": len(views),
+                "views": views
+            },
+            
+            # Raw objects data (for advanced analysis and Raw Data tab)
+            "objects": {
+                "total_count": len(objects),
+                "objects": all_properties[:500]  # Limit to first 500 for database storage
+            },
+            
+            # Additional metadata
+            "metadata_note": "Extracted via Autodesk APS Model Derivative Metadata API with full CAD properties",
+            "aps_extraction": True
+        }
+        
+        return structured_metadata
+
+    def _convert_dwg_with_libredwg(self, dwg_path: str) -> Optional[str]:
+        """
+        Convert DWG to DXF using LibreDWG's dwg2dxf utility (fallback).
+        Less reliable but works for simple drawings.
         
         Args:
             dwg_path: Path to DWG file
@@ -222,9 +771,8 @@ class DXFParser:
             Path to converted DXF file, or None if conversion fails
         """
         try:
-            # Create temporary DXF file
             temp_dir = tempfile.gettempdir()
-            dxf_path = Path(temp_dir) / f"{Path(dwg_path).stem}_converted.dxf"
+            dxf_path = Path(temp_dir) / f"{Path(dwg_path).stem}_libredwg.dxf"
             
             # Run dwg2dxf conversion
             result = subprocess.run(
@@ -235,21 +783,62 @@ class DXFParser:
             )
             
             if result.returncode == 0 and dxf_path.exists():
-                logger.info(f"Successfully converted DWG to DXF: {dxf_path}")
-                return str(dxf_path)
+                logger.info(f"LibreDWG conversion succeeded: {dxf_path}")
+                
+                # Clean up problematic MTEXT entities
+                logger.info("Cleaning DXF file to remove problematic MTEXT entities...")
+                cleaned_path, cleaned_count = self._clean_dxf_file(str(dxf_path))
+                
+                if cleaned_count > 0:
+                    logger.info(f"Removed {cleaned_count} problematic MTEXT entities")
+                
+                return cleaned_path
             else:
-                logger.error(f"DWG conversion failed: {result.stderr}")
+                logger.warning(f"LibreDWG conversion failed: {result.stderr}")
                 return None
                 
         except subprocess.TimeoutExpired:
-            logger.error("DWG conversion timed out after 60 seconds")
+            logger.error("LibreDWG conversion timed out after 60 seconds")
             return None
         except FileNotFoundError:
-            logger.error("dwg2dxf command not found. Ensure LibreDWG is installed.")
+            logger.debug("dwg2dxf (LibreDWG) not found")
             return None
         except Exception as e:
-            logger.error(f"Error converting DWG to DXF: {e}")
+            logger.warning(f"LibreDWG conversion error: {e}")
             return None
+
+    def _process_dwg_file(self, dwg_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Process DWG file using best available method.
+        Tries multiple methods in order of reliability:
+        1. Autodesk Platform Services (APS) - most reliable, 100% compatibility, direct metadata extraction
+        2. LibreDWG conversion to DXF - free fallback, ~60% success rate
+        
+        Args:
+            dwg_path: Path to DWG file
+            
+        Returns:
+            Dictionary with extracted metadata, or None if all methods fail
+        """
+        logger.info(f"Processing DWG file: {dwg_path}")
+        
+        # Method 1: Try Autodesk Platform Services (APS) first (best quality, direct metadata)
+        logger.info("Attempting translation with Autodesk Platform Services (APS)...")
+        result = self._translate_dwg_with_aps(dwg_path)
+        if result:
+            return result
+        
+        # Method 2: Fallback to LibreDWG + ezdxf parsing (free but less reliable)
+        logger.info("APS not available, attempting conversion with LibreDWG...")
+        dxf_path = self._convert_dwg_with_libredwg(dwg_path)
+        if dxf_path:
+            # Parse the DXF file with ezdxf
+            logger.info(f"Parsing converted DXF file: {dxf_path}")
+            return self._parse_dxf_file(dxf_path, source_format="dwg")
+        
+        # All methods failed
+        logger.error("All DWG processing methods failed")
+        return None
     
     def parse(self, file_path: str) -> Dict[str, Any]:
         """
@@ -261,51 +850,127 @@ class DXFParser:
         Returns:
             Dictionary with extracted metadata
         """
-        converted_path = None
         try:
-            # Check if file is DWG and needs conversion
+            # Check if file is DWG or DXF
             file_ext = Path(file_path).suffix.lower()
             
             if file_ext == '.dwg':
-                logger.info(f"DWG file detected, converting to DXF: {file_path}")
-                converted_path = self._convert_dwg_to_dxf(file_path)
+                logger.info(f"DWG file detected, processing: {file_path}")
+                # Process DWG directly (APS translates to SVF2 + metadata, or LibreDWG converts to DXF)
+                result = self._process_dwg_file(file_path)
                 
-                if not converted_path:
+                if not result:
                     return {
-                        "error": "DWG conversion failed",
+                        "error": "DWG processing failed",
                         "processing_status": "failed",
-                        "message": "Could not convert DWG to DXF. File may be corrupt or use unsupported version."
+                        "message": "Could not process DWG file. All methods failed.",
+                        "source_format": "dwg"
                     }
                 
-                # Use converted DXF file
-                file_path = converted_path
+                return result
+            
+            # For DXF files, parse directly with ezdxf
+            return self._parse_dxf_file(file_path, source_format="dxf")
+            
+        except Exception as e:
+            logger.error(f"Error parsing CAD file: {e}")
+            return {
+                "error": str(e),
+                "processing_status": "failed"
+            }
+    
+    def _parse_dxf_file(self, file_path: str, source_format: str = "dxf") -> Dict[str, Any]:
+        """
+        Parse DXF file with ezdxf and extract metadata.
+        
+        Args:
+            file_path: Path to DXF file
+            source_format: Original format ("dxf" or "dwg")
+            
+        Returns:
+            Dictionary with extracted metadata
+        """
+        parsing_log = []
+        converted_path = None
+        
+        try:
+            parsing_log.append(f"Parsing DXF file (source: {source_format})")
             
             # Parse DXF file with ezdxf (use recovery mode for robustness)
+            parsing_log.append("Attempting standard ezdxf parsing...")
             try:
                 doc = self.ezdxf.readfile(file_path)
+                parsing_log.append("Standard parsing successful")
             except Exception as read_error:
+                error_msg = str(read_error)
+                parsing_log.append(f"Standard parsing failed: {error_msg[:200]}")
                 logger.warning(f"Standard read failed, trying recovery mode: {read_error}")
+                
                 # Try recovery mode for malformed DXF files
-                from ezdxf import recover
-                doc, auditor = recover.readfile(file_path)
-                if auditor.has_errors:
-                    logger.warning(f"DXF file has {len(auditor.errors)} errors (recovered)")
-                # Note: auditor object may not have 'issues' attribute in all ezdxf versions
-                logger.info("Successfully recovered DXF file using recovery mode")
+                parsing_log.append("Attempting ezdxf recovery mode...")
+                try:
+                    from ezdxf import recover
+                    doc, auditor = recover.readfile(file_path)
+                    if auditor.has_errors:
+                        parsing_log.append(f"Recovery mode found {len(auditor.errors)} errors but recovered")
+                        logger.warning(f"DXF file has {len(auditor.errors)} errors (recovered)")
+                    parsing_log.append("Recovery mode successful")
+                    logger.info("Successfully recovered DXF file using recovery mode")
+                except Exception as recovery_error:
+                    parsing_log.append(f"Recovery mode failed: {str(recovery_error)[:200]}")
+                    logger.error(f"Recovery mode also failed: {recovery_error}")
+                    
+                    # Last resort: try to extract text directly from DXF file
+                    logger.info("Attempting raw text extraction from DXF file...")
+                    parsing_log.append("Attempting raw text extraction as last resort...")
+                    try:
+                        raw_text = self._extract_raw_text_from_dxf(file_path)
+                        parsing_log.append(f"Raw text extraction found {len(raw_text)} characters")
+                        return {
+                            "processing_status": "partial",
+                            "error": str(read_error),
+                            "recovery_error": str(recovery_error),
+                            "source_format": source_format,
+                            "message": "File has parsing errors, but text content was extracted",
+                            "raw_text_content": raw_text[:10000],  # Limit to first 10KB
+                            "text_extraction_method": "raw_dxf_parsing",
+                            "parsing_log": parsing_log
+                        }
+                    except Exception as text_error:
+                        parsing_log.append(f"Raw text extraction failed: {str(text_error)}")
+                        logger.error(f"Raw text extraction also failed: {text_error}")
+                        # If everything fails, return error
+                        return {
+                            "processing_status": "failed",
+                            "error": str(read_error),
+                            "recovery_error": str(recovery_error),
+                            "source_format": source_format,
+                            "message": "File parsing failed. The file may be corrupted, use an unsupported DWG version, or contain invalid data.",
+                            "parsing_log": parsing_log
+                        }
+            
+            parsing_log.append("Extracting metadata from parsed document...")
+            
+            # Count total entities
+            entities = self._count_entities(doc)
+            total_entities = sum(entities.values()) if entities else 0
             
             metadata = {
                 "processing_status": "completed",
-                "source_format": "dwg" if file_ext == '.dwg' else "dxf",
+                "source_format": source_format,
+                "extraction_method": "ezdxf_local_parsing",
                 "dxf_version": doc.dxfversion,
                 "layers": self._extract_layers(doc),
                 "blocks": self._extract_blocks(doc),
-                "entities": self._count_entities(doc),
+                "entities": entities,
                 "text_annotations": self._extract_text(doc),
                 "dimensions": self._extract_dimensions(doc),
                 "viewport_info": self._extract_viewport_info(doc),
+                "parsing_log": parsing_log
             }
             
-            logger.info(f"Successfully parsed CAD file: {file_path}")
+            parsing_log.append(f"Metadata extraction complete: {len(metadata.get('layers', {}).get('layers', []))} layers, {total_entities} entities")
+            logger.info(f"Successfully parsed DXF file: {file_path}")
             return metadata
             
         except Exception as e:
@@ -322,6 +987,59 @@ class DXFParser:
                     logger.debug(f"Cleaned up temporary DXF file: {converted_path}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up temporary file: {e}")
+    
+    def _extract_raw_text_from_dxf(self, file_path: str) -> str:
+        """
+        Extract text content directly from DXF file by parsing the text file
+        This is a fallback when ezdxf parsing fails
+        """
+        try:
+            texts = []
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+                
+                # Simple state machine to extract TEXT and MTEXT content
+                in_text = False
+                in_mtext = False
+                text_buffer = []
+                
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    
+                    # Detect TEXT or MTEXT entities
+                    if line in ['TEXT', 'MTEXT']:
+                        in_text = True
+                        text_buffer = []
+                        continue
+                    
+                    # Group code 1 is the text content
+                    if in_text and i > 0 and lines[i-1].strip() == '1':
+                        text_content = line
+                        if text_content and len(text_content) > 2:
+                            texts.append(text_content)
+                        in_text = False
+                        continue
+                    
+                    # Group code 3 is MTEXT content (can be multi-line)
+                    if in_text and i > 0 and lines[i-1].strip() == '3':
+                        text_content = line
+                        if text_content and len(text_content) > 2:
+                            text_buffer.append(text_content)
+                        continue
+                    
+                    # Reset state on new entity
+                    if line in ['ENDSEC', 'ENDBLK'] or (line.isdigit() and line == '0'):
+                        if text_buffer:
+                            texts.append(' '.join(text_buffer))
+                        in_text = False
+                        text_buffer = []
+            
+            logger.info(f"Extracted {len(texts)} text entities using raw parsing")
+            return '\n'.join(texts)
+            
+        except Exception as e:
+            logger.error(f"Raw text extraction failed: {e}")
+            return ""
     
     def _extract_layers(self, doc) -> Dict[str, Any]:
         """Extract layer information"""
@@ -458,34 +1176,387 @@ class DocumentParser:
 
 
 class PDFParser:
-    """PDF text extraction"""
+    """
+    Advanced PDF parser with OCR, table detection, and spatial analysis.
+    Optimized for fire safety compliance document analysis.
+    """
     
     def parse(self, file_path: str) -> Dict[str, Any]:
-        """Extract text from PDF"""
+        """
+        Extract comprehensive content from PDF including text, tables, images, legends.
+        Performs OCR on images and scanned pages with Romanian support.
+        """
         try:
-            import PyPDF2
+            import fitz  # PyMuPDF
+            import pytesseract
+            from PIL import Image
+            import io
+            import numpy as np
+            import cv2
             
-            with open(file_path, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
-                
-                # Extract full text from all pages
-                full_text = []
-                for page in reader.pages:
-                    text = page.extract_text()
-                    if text:
-                        full_text.append(text)
-                
-                combined_text = "\n\n".join(full_text)
-                
-                return {
-                    "type": "pdf",
-                    "page_count": len(reader.pages),
-                    "text": combined_text,
-                    "char_count": len(combined_text)
+            logger.info(f"Starting advanced PDF parsing: {file_path}")
+            parsing_log = [
+                "Detected file type: PDF",
+                "Starting advanced PDF content extraction with OCR..."
+            ]
+            
+            # Open PDF
+            doc = fitz.open(file_path)
+            total_pages = len(doc)
+            parsing_log.append(f"PDF contains {total_pages} pages")
+            
+            # Initialize extraction results
+            all_text = []
+            all_blocks = []  # Text blocks with position
+            tables = []
+            images_extracted = []
+            legends_found = []
+            color_codes = []
+            page_metadata = []
+            
+            # Romanian fire safety keywords
+            fire_safety_keywords = [
+                'rezistenta la foc', 'rezistență la foc', 'REI', 'EI', 'compartimentare',
+                'evacuare', 'iesire', 'ieșire', 'scara', 'legenda', 'legendă',
+                'ignifug', 'protectie', 'protecție', 'rezistent', 'incendiu'
+            ]
+            
+            # Process each page
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                page_info = {
+                    'page_number': page_num + 1,
+                    'width': page.rect.width,
+                    'height': page.rect.height
                 }
+                
+                # Extract text with position information
+                blocks = page.get_text("dict")["blocks"]
+                page_has_text = False
+                
+                for block in blocks:
+                    if block.get("type") == 0:  # Text block
+                        for line in block.get("lines", []):
+                            for span in line.get("spans", []):
+                                text_content = span.get("text", "").strip()
+                                if text_content:
+                                    page_has_text = True
+                                    all_text.append(text_content)
+                                    all_blocks.append({
+                                        'text': text_content,
+                                        'page': page_num + 1,
+                                        'bbox': span.get("bbox"),  # (x0, y0, x1, y1)
+                                        'font': span.get("font"),
+                                        'size': span.get("size"),
+                                        'color': span.get("color")
+                                    })
+                
+                # If page has no/little text, it might be scanned - OCR the whole page
+                if not page_has_text or len([b for b in all_blocks if b['page'] == page_num + 1]) < 5:
+                    try:
+                        # Render page to image
+                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better OCR
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        
+                        # Perform OCR
+                        ocr_text = pytesseract.image_to_string(img, lang='ron+eng', config='--psm 3')
+                        
+                        if ocr_text.strip():
+                            all_text.append(ocr_text)
+                            parsing_log.append(f"Page {page_num + 1}: Performed full-page OCR (scanned/low text)")
+                    except Exception as ocr_error:
+                        logger.debug(f"Full-page OCR failed for page {page_num + 1}: {ocr_error}")
+                
+                # Extract tables using text block positions
+                page_tables = self._extract_tables_from_blocks(blocks, page_num + 1)
+                tables.extend(page_tables)
+                
+                # Extract images and perform OCR
+                image_list = page.get_images(full=True)
+                for img_index, img in enumerate(image_list):
+                    try:
+                        xref = img[0]
+                        base_image = doc.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_ext = base_image["ext"]
+                        
+                        # Convert to PIL Image
+                        pil_image = Image.open(io.BytesIO(image_bytes))
+                        
+                        # Perform OCR with Romanian support
+                        ocr_text = pytesseract.image_to_string(
+                            pil_image,
+                            lang='ron+eng',
+                            config='--psm 6'
+                        )
+                        
+                        if ocr_text.strip():
+                            all_text.append(ocr_text)
+                            images_extracted.append({
+                                'page': page_num + 1,
+                                'index': img_index,
+                                'format': image_ext,
+                                'ocr_text': ocr_text,
+                                'size': len(image_bytes)
+                            })
+                            
+                            # Check for fire safety legends in images
+                            if any(keyword in ocr_text.lower() for keyword in fire_safety_keywords):
+                                legends_found.append({
+                                    'page': page_num + 1,
+                                    'source': 'image_ocr',
+                                    'content': ocr_text[:500]  # First 500 chars
+                                })
+                        
+                        # Detect color codes using OpenCV
+                        img_array = np.array(pil_image.convert('RGB'))
+                        img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                        
+                        # Find dominant colors
+                        dominant_colors = self._extract_dominant_colors(img_bgr)
+                        if dominant_colors:
+                            color_codes.extend([{
+                                'page': page_num + 1,
+                                'rgb': color,
+                                'percentage': percentage
+                            } for color, percentage in dominant_colors])
+                    
+                    except Exception as img_error:
+                        logger.debug(f"Error processing image {img_index} on page {page_num + 1}: {img_error}")
+                        continue
+                
+                # Detect legends and tables in text
+                page_text = " ".join([b['text'] for b in all_blocks if b['page'] == page_num + 1])
+                
+                # Look for legend patterns
+                legend_patterns = [
+                    r'legend[aă][\s:]+.*rezisten[țt][aă].*foc',
+                    r'tabel.*rezisten[țt][aă].*foc',
+                    r'simbol.*REI.*\d+',
+                    r'nota[țt]ii.*REI'
+                ]
+                
+                for pattern in legend_patterns:
+                    matches = list(re.finditer(pattern, page_text, re.IGNORECASE | re.DOTALL))[:5]  # Max 5 per pattern
+                    for match in matches:
+                        # Extract context around match
+                        start = max(0, match.start() - 100)
+                        end = min(len(page_text), match.end() + 200)
+                        context = page_text[start:end]
+                        
+                        legends_found.append({
+                            'page': page_num + 1,
+                            'source': 'text_pattern',
+                            'content': context
+                        })
+                
+                page_metadata.append(page_info)
+            
+            doc.close()
+            
+            # Combine all text
+            full_text = "\n".join(all_text)
+            
+            # Extract fire safety specific information
+            rei_codes = self._extract_rei_codes(full_text)
+            compartments = self._detect_compartmentation(full_text)
+            egress_routes = self._detect_egress_routes(full_text, all_blocks)
+            
+            parsing_log.append(f"Extracted {len(full_text)} characters of text")
+            parsing_log.append(f"Found {len(all_blocks)} text blocks with position data")
+            parsing_log.append(f"Extracted {len(images_extracted)} images with OCR")
+            parsing_log.append(f"Detected {len(tables)} tables")
+            parsing_log.append(f"Found {len(legends_found)} potential fire safety legends")
+            parsing_log.append(f"Identified {len(rei_codes)} REI classifications")
+            parsing_log.append(f"Detected {len(compartments)} compartmentation references")
+            parsing_log.append(f"Found {len(egress_routes)} egress route indicators")
+            parsing_log.append("PDF parsing completed successfully")
+            
+            return {
+                'type': 'pdf',
+                'success': True,
+                'processing_status': 'completed',
+                'pages': total_pages,
+                'text': full_text,  # For backward compatibility
+                'text_content': full_text,
+                'char_count': len(full_text),
+                'text_blocks': all_blocks[:1000],  # Limit for performance
+                'tables': tables,
+                'images': images_extracted,
+                'legends': legends_found,
+                'color_codes': color_codes[:50],  # Top 50 colors
+                'fire_safety_data': {
+                    'rei_codes': rei_codes,
+                    'compartments': compartments,
+                    'egress_routes': egress_routes
+                },
+                'page_metadata': page_metadata,
+                'parsing_log': parsing_log,
+                'text_extraction_method': 'pymupdf_ocr'
+            }
+            
+        except ImportError as e:
+            logger.error(f"Required library not installed: {e}")
+            return {
+                'type': 'pdf',
+                'success': False,
+                'error': f"Required library not installed: {e}",
+                'message': 'PDF parsing requires PyMuPDF, pytesseract, PIL, opencv-python',
+                'processing_status': 'failed',
+                'parsing_log': ['PDF parsing failed: Missing required libraries'],
+                'text': ''
+            }
         except Exception as e:
-            logger.error(f"Error parsing PDF: {e}")
-            return {"error": str(e), "type": "pdf", "text": ""}
+            logger.error(f"Error parsing PDF: {e}", exc_info=True)
+            return {
+                'type': 'pdf',
+                'success': False,
+                'error': str(e),
+                'message': f'Failed to parse PDF: {str(e)}',
+                'processing_status': 'failed',
+                'parsing_log': [f'PDF parsing failed: {str(e)}'],
+                'text': ''
+            }
+    
+    def _extract_tables_from_blocks(self, blocks: list, page_num: int) -> list:
+        """Extract table-like structures from text blocks based on spatial positioning"""
+        tables = []
+        
+        # Group blocks by approximate Y coordinate (rows)
+        rows = {}
+        for block in blocks:
+            if block.get("type") != 0:
+                continue
+            
+            for line in block.get("lines", []):
+                bbox = line.get("bbox")
+                if not bbox:
+                    continue
+                
+                y_coord = int(bbox[1] / 10) * 10  # Round to nearest 10 for grouping
+                if y_coord not in rows:
+                    rows[y_coord] = []
+                
+                text = " ".join([span.get("text", "") for span in line.get("spans", [])])
+                rows[y_coord].append({
+                    'text': text.strip(),
+                    'x': bbox[0],
+                    'y': bbox[1]
+                })
+        
+        # Detect tables (rows with similar number of columns)
+        row_list = sorted(rows.items())
+        if len(row_list) > 3:  # At least 3 rows for a table
+            # Look for consecutive rows with multiple columns
+            current_table = []
+            for y_coord, cells in row_list:
+                if len(cells) >= 2:  # At least 2 columns
+                    sorted_cells = sorted(cells, key=lambda c: c['x'])
+                    current_table.append([cell['text'] for cell in sorted_cells])
+                else:
+                    if len(current_table) >= 3:
+                        tables.append({
+                            'page': page_num,
+                            'rows': len(current_table),
+                            'data': current_table
+                        })
+                    current_table = []
+            
+            if len(current_table) >= 3:
+                tables.append({
+                    'page': page_num,
+                    'rows': len(current_table),
+                    'data': current_table
+                })
+        
+        return tables
+    
+    def _extract_dominant_colors(self, img_bgr, num_colors: int = 5) -> list:
+        """Extract dominant colors from image using K-means clustering"""
+        try:
+            import cv2
+            import numpy as np
+            
+            # Resize for faster processing
+            img_small = cv2.resize(img_bgr, (100, 100))
+            pixels = img_small.reshape(-1, 3).astype(float)
+            
+            # Use K-means to find dominant colors
+            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+            _, labels, centers = cv2.kmeans(pixels, num_colors, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
+            
+            # Calculate color percentages
+            unique, counts = np.unique(labels, return_counts=True)
+            color_percentages = counts / counts.sum()
+            
+            # Return colors sorted by frequency
+            colors_with_percentage = [
+                (tuple(int(c) for c in centers[i]), float(color_percentages[i]))
+                for i in range(len(centers))
+            ]
+            return sorted(colors_with_percentage, key=lambda x: x[1], reverse=True)
+        
+        except Exception as e:
+            logger.debug(f"Error extracting colors: {e}")
+            return []
+    
+    def _extract_rei_codes(self, text: str) -> list:
+        """Extract REI fire resistance codes from text"""
+        rei_pattern = r'REI[-:\s=]*(\d+)'
+        matches = re.finditer(rei_pattern, text, re.IGNORECASE)
+        
+        rei_codes = []
+        seen_codes = set()
+        for match in matches:
+            code = match.group(0)
+            if code not in seen_codes:
+                seen_codes.add(code)
+                rei_codes.append({
+                    'code': code,
+                    'minutes': int(match.group(1)),
+                    'context': text[max(0, match.start()-50):min(len(text), match.end()+50)]
+                })
+        
+        return rei_codes[:100]  # Limit to first 100
+    
+    def _detect_compartmentation(self, text: str) -> list:
+        """Detect fire compartmentation references"""
+        compartment_patterns = [
+            r'compartiment[^\n]{0,100}foc',
+            r'sector[^\n]{0,100}incendiu',
+            r'separare[^\n]{0,100}ignifug'
+        ]
+        
+        compartments = []
+        seen = set()
+        for pattern in compartment_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE | re.DOTALL)
+            for match in matches:
+                text_found = match.group(0)
+                if text_found not in seen:
+                    seen.add(text_found)
+                    compartments.append(text_found)
+        
+        return compartments[:50]  # Limit to first 50
+    
+    def _detect_egress_routes(self, text: str, blocks: list) -> list:
+        """Detect emergency egress route indicators"""
+        egress_keywords = [
+            'evacuare', 'ieșire', 'iesire', 'urgență', 'urgenta',
+            'scară', 'scara', 'cale', 'rută', 'ruta'
+        ]
+        
+        egress_routes = []
+        for block in blocks:
+            block_text = block.get('text', '').lower()
+            if any(keyword in block_text for keyword in egress_keywords):
+                egress_routes.append({
+                    'text': block['text'],
+                    'page': block.get('page'),
+                    'position': block.get('bbox')
+                })
+        
+        return egress_routes[:50]  # Limit to first 50
 
 
 class DOCXParser:

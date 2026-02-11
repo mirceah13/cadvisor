@@ -63,6 +63,7 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         
         # Extract text based on source type
         text_content = None
+        file = None  # Initialize file variable
         
         if source.source_type == "document" and source.file_id:
             # Get file record

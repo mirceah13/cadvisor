@@ -21,7 +21,8 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install LibreDWG from source for DWG conversion
+# Install LibreDWG for DWG to DXF conversion (free fallback)
+# Note: Autodesk Forge API is preferred but requires API credentials
 RUN cd /tmp && \
     git clone --depth 1 --branch 0.13.3 https://github.com/LibreDWG/libredwg.git && \
     cd libredwg && \
@@ -31,7 +32,8 @@ RUN cd /tmp && \
     make install && \
     ldconfig && \
     cd / && \
-    rm -rf /tmp/libredwg
+    rm -rf /tmp/libredwg && \
+    echo "✅ LibreDWG installed"
 
 # Copy requirements
 COPY services/api/requirements.txt .

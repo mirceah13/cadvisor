@@ -1,15 +1,21 @@
 """
 Configuration Settings
 """
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, validator, field_validator
+from pydantic import Field, validator, field_validator, model_validator
 import os
 import json
 
 
 class Settings(BaseSettings):
     """Application settings"""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+    )
     
     # Application
     APP_NAME: str = "CADVisor"
@@ -43,22 +49,27 @@ class Settings(BaseSettings):
     PASSWORD_HASH_MEMORY_COST: int = Field(default=65536, env="PASSWORD_HASH_MEMORY_COST")
     PASSWORD_HASH_PARALLELISM: int = Field(default=4, env="PASSWORD_HASH_PARALLELISM")
     
-    # CORS
-    CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000"],
+    # CORS - stored as string, converted to list via property
+    cors_origins_str: str = Field(
+        default="http://localhost:3000",
+        validation_alias="CORS_ORIGINS"
     )
     CORS_CREDENTIALS: bool = Field(default=True, env="CORS_CREDENTIALS")
     
-    @field_validator('CORS_ORIGINS', mode='before')
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                # Fallback to comma-separated
-                return [origin.strip() for origin in v.split(',')]
-        return v
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """Parse CORS_ORIGINS from string to list"""
+        v = self.cors_origins_str
+        # Handle empty string
+        if not v or v.strip() == "":
+            return ["http://localhost:3000"]
+        # Try JSON first
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, list) else [str(parsed)]
+        except json.JSONDecodeError:
+            # Fallback to comma-separated
+            return [origin.strip() for origin in v.split(',') if origin.strip()]
     
     # Trusted hosts (production)
     ALLOWED_HOSTS: List[str] = Field(default=["*"], env="ALLOWED_HOSTS")
@@ -78,6 +89,10 @@ class Settings(BaseSettings):
     
     # Ollama
     OLLAMA_BASE_URL: str = Field(default="http://ollama:11434", env="OLLAMA_BASE_URL")
+    
+    # Autodesk Platform Services (APS) - for DWG conversion
+    APS_CLIENT_ID: Optional[str] = Field(default=None, env="APS_CLIENT_ID")
+    APS_CLIENT_SECRET: Optional[str] = Field(default=None, env="APS_CLIENT_SECRET")
     
     # Aliases for MinIO client
     @property
@@ -135,10 +150,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v
         return ",".join(v)
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 # Create settings instance

@@ -198,14 +198,15 @@ def get_processing_status(
     
     file_statuses = []
     for file in files:
-        metadata = file.metadata or {}
+        # Processing status is stored in parsed_metadata
+        parsed_metadata = file.parsed_metadata or {}
         file_statuses.append({
             "file_id": str(file.id),
             "filename": file.filename,
             "mime_type": file.mime_type,
-            "processing_status": metadata.get("processing_status", "pending"),
-            "task_id": metadata.get("processing_task_id"),
-            "error": metadata.get("processing_error"),
+            "processing_status": parsed_metadata.get("processing_status", "pending"),
+            "task_id": parsed_metadata.get("processing_task_id"),
+            "error": parsed_metadata.get("processing_error"),
         })
     
     # Overall submission status

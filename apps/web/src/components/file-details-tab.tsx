@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
-  Calculator
+  Calculator,
+  CheckCircle2
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
@@ -294,10 +295,11 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
       ) : (
         /* Full Details View */
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="building">Building</TabsTrigger>
             <TabsTrigger value="geometry">Geometry</TabsTrigger>
+            <TabsTrigger value="parsing">Parsing Report</TabsTrigger>
             <TabsTrigger value="raw">Raw Data</TabsTrigger>
           </TabsList>
 
@@ -613,6 +615,204 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Parsing Report Tab */}
+          <TabsContent value="parsing" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Parsing Report
+                </CardTitle>
+                <CardDescription>
+                  Detailed information about the file parsing process for {selectedFile?.filename}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Status Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className={`p-4 border rounded-lg ${
+                    metadata.processing_status === 'completed' ? 'bg-green-50 border-green-200' :
+                    metadata.processing_status === 'partial' ? 'bg-yellow-50 border-yellow-200' :
+                    metadata.processing_status === 'failed' ? 'bg-red-50 border-red-200' :
+                    'bg-gray-50'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {metadata.processing_status === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+                      {metadata.processing_status === 'partial' && <AlertCircle className="h-5 w-5 text-yellow-600" />}
+                      {metadata.processing_status === 'failed' && <AlertCircle className="h-5 w-5 text-red-600" />}
+                      <span className="font-semibold">Status</span>
+                    </div>
+                    <p className="text-lg font-bold capitalize">
+                      {metadata.processing_status || 'Unknown'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <span className="font-semibold">Format</span>
+                    </div>
+                    <p className="text-lg font-bold uppercase">
+                      {metadata.source_format || metadata.file_type || 'Unknown'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Type className="h-5 w-5 text-muted-foreground" />
+                      <span className="font-semibold">Text Extracted</span>
+                    </div>
+                    <p className="text-lg font-bold">
+                      {metadata.text_annotations?.count || 
+                       metadata.text?.count || 
+                       (metadata.raw_text_content ? 'Yes' : 'No')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Processing Details */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Processing Details</h3>
+                  <div className="space-y-2">
+                    {metadata.processing_started_at && (
+                      <DataRow label="Started At" value={new Date(metadata.processing_started_at).toLocaleString()} />
+                    )}
+                    {metadata.processing_completed_at && (
+                      <DataRow label="Completed At" value={new Date(metadata.processing_completed_at).toLocaleString()} />
+                    )}
+                    {metadata.text_extraction_method && (
+                      <DataRow label="Extraction Method" value={metadata.text_extraction_method} />
+                    )}
+                    {metadata.dxf_version && (
+                      <DataRow label="DXF Version" value={metadata.dxf_version} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Errors and Warnings */}
+                {(metadata.error || metadata.recovery_error || metadata.message) && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">Messages</h3>
+                    
+                    {metadata.message && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-blue-900">Information</p>
+                            <p className="text-sm text-blue-700 mt-1">{metadata.message}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {metadata.error && (
+                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-red-900">Parsing Error</p>
+                            <p className="text-sm text-red-700 mt-1 font-mono break-all">{metadata.error}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {metadata.recovery_error && (
+                      <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-orange-900">Recovery Attempt Failed</p>
+                            <p className="text-sm text-orange-700 mt-1 font-mono break-all">{metadata.recovery_error}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Extracted Content Summary */}
+                {metadata.raw_text_content && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">Extracted Text Content</h3>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <pre className="text-xs font-mono overflow-auto max-h-[200px] whitespace-pre-wrap">
+                        {metadata.raw_text_content}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Parsing Log */}
+                {metadata.parsing_log && metadata.parsing_log.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">Detailed Parsing Log</h3>
+                    <div className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-auto max-h-[400px]">
+                      <div className="space-y-1 font-mono text-xs">
+                        {metadata.parsing_log.map((log: string, index: number) => (
+                          <div key={index} className={`${
+                            log.includes('ERROR') ? 'text-red-400' :
+                            log.includes('failed') && !log.includes('Recovery') ? 'text-orange-400' :
+                            log.includes('successful') || log.includes('complete') ? 'text-green-400' :
+                            log.includes('Attempting') ? 'text-blue-400' :
+                            'text-slate-300'
+                          }`}>
+                            <span className="text-slate-500 mr-2">[{String(index + 1).padStart(2, '0')}]</span>
+                            {log}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This log shows the step-by-step parsing process including conversion, parsing attempts, and recovery operations.
+                    </p>
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {metadata.processing_status !== 'completed' && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-blue-900">Understanding MTEXT Parsing Errors</p>
+                        <div className="text-sm text-blue-700 mt-2 space-y-2">
+                          <p>
+                            The MTEXT errors you're seeing are a <strong>known limitation of LibreDWG</strong>, the open-source DWG converter we use.
+                            While your file is perfectly valid and opens fine in AutoCAD/Autodesk viewers, LibreDWG struggles with complex MTEXT formatting codes.
+                          </p>
+                          <p className="font-medium mt-3">Solutions:</p>
+                          <ul className="list-disc list-inside space-y-1 ml-2">
+                            {metadata.processing_status === 'partial' && (
+                              <>
+                                <li>The system successfully extracted some content and analysis can proceed</li>
+                                <li>For better results, export your DWG as DXF directly from AutoCAD (File → Save As → DXF format)</li>
+                                <li>Alternatively, use <a href="https://www.opendesign.com/guestfiles/oda_file_converter" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-900">ODA File Converter</a> (free) to convert DWG to DXF before uploading</li>
+                              </>
+                            )}
+                            {metadata.processing_status === 'failed' && (
+                              <>
+                                <li>Convert to DXF format using AutoCAD or <a href="https://www.opendesign.com/guestfiles/oda_file_converter" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-900">ODA File Converter</a></li>
+                                <li>Open the DWG in AutoCAD and use AUDIT command to repair any issues</li>
+                                <li>Simplify complex MTEXT formatting before exporting</li>
+                                <li>Save as an older DXF version (R2000 or R2004) for better compatibility</li>
+                              </>
+                            )}
+                          </ul>
+                          <p className="mt-3 text-xs italic">
+                            <strong>Technical note:</strong> LibreDWG generates malformed formatting codes like "|i0|c0|p34;\fArial" that ezdxf cannot parse.
+                            This is a LibreDWG bug, not an issue with your file.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Raw Data Tab */}

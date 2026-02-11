@@ -14,7 +14,7 @@ import logging
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import User, KnowledgeSource, KBChunk
+from app.models import User, KnowledgeSource, KBChunk, KBImage
 from app.services.knowledge_base import KnowledgeBaseService
 from app.tasks.kb import ingest_knowledge_source
 
@@ -44,6 +44,11 @@ class KnowledgeSourceResponse(BaseModel):
     file_id: Optional[UUID]
     url: Optional[str]
     chunks_count: Optional[int] = None
+    images_count: Optional[int] = None
+    chunks_with_embeddings: Optional[int] = None
+    images_with_embeddings: Optional[int] = None
+    text_length: Optional[int] = None
+    processing_time: Optional[float] = None
     meta_data: Optional[Dict[str, Any]] = None
     created_at: str
     
@@ -219,7 +224,7 @@ def get_knowledge_source(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific knowledge source"""
+    """Get a specific knowledge source with detailed statistics"""
     if not current_user.org_memberships:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -237,6 +242,39 @@ def get_knowledge_source(
             detail="Knowledge source not found"
         )
     
+    # Get comprehensive statistics
+    chunks_count = kb_service.get_chunks_count(source.id)
+    
+    # Count images
+    images_count = db.query(func.count(KBImage.id)).filter(
+        KBImage.knowledge_source_id == source.id
+    ).scalar() or 0
+    
+    # Count chunks with embeddings
+    chunks_with_embeddings = db.query(func.count(KBChunk.id)).filter(
+        KBChunk.knowledge_source_id == source.id,
+        KBChunk.embedding.isnot(None)
+    ).scalar() or 0
+    
+    # Count images with visual embeddings
+    images_with_embeddings = db.query(func.count(KBImage.id)).filter(
+        KBImage.knowledge_source_id == source.id,
+        KBImage.visual_embedding.isnot(None)
+    ).scalar() or 0
+    
+    # Calculate total text length
+    text_length_result = db.query(
+        func.sum(func.length(KBChunk.chunk_text))
+    ).filter(
+        KBChunk.knowledge_source_id == source.id
+    ).scalar()
+    text_length = int(text_length_result) if text_length_result else 0
+    
+    # Get processing time from metadata if available
+    processing_time = None
+    if source.meta_data and 'processing_time' in source.meta_data:
+        processing_time = source.meta_data['processing_time']
+    
     return KnowledgeSourceResponse(
         id=source.id,
         title=source.title,
@@ -245,7 +283,12 @@ def get_knowledge_source(
         status=source.status,
         file_id=source.file_id,
         url=source.url,
-        chunks_count=kb_service.get_chunks_count(source.id),
+        chunks_count=chunks_count,
+        images_count=images_count,
+        chunks_with_embeddings=chunks_with_embeddings,
+        images_with_embeddings=images_with_embeddings,
+        text_length=text_length,
+        processing_time=processing_time,
         meta_data=source.meta_data,
         created_at=source.created_at.isoformat()
     )
@@ -359,13 +402,18 @@ def reingest_source(
             detail="Knowledge source not found"
         )
     
-    # Reset status and delete old chunks
-    from app.models import KBChunk
-    db.query(KBChunk).filter(KBChunk.knowledge_source_id == source_id).delete()
+    # Delete old chunks and images before re-processing
+    chunks_deleted = db.query(KBChunk).filter(KBChunk.knowledge_source_id == source_id).delete()
+    images_deleted = db.query(KBImage).filter(KBImage.knowledge_source_id == source_id).delete()
     
+    logger.info(f"Deleted {chunks_deleted} chunks and {images_deleted} images for source {source_id}")
+    
+    # Reset status to uploaded
     source.status = "uploaded"
     source.meta_data = source.meta_data or {}
     source.meta_data.pop("chunks_count", None)
+    source.meta_data.pop("images_count", None)
+    source.meta_data.pop("error", None)
     db.commit()
     
     # Trigger ingestion
@@ -493,10 +541,30 @@ def get_knowledge_base_stats(
         KBChunk.org_id == org_id
     ).scalar() or 0
     
+    # Get total images count
+    total_images = db.query(func.count(KBImage.id)).filter(
+        KBImage.org_id == org_id
+    ).scalar() or 0
+    
+    # Get chunks with embeddings
+    chunks_with_embeddings = db.query(func.count(KBChunk.id)).filter(
+        KBChunk.org_id == org_id,
+        KBChunk.embedding.isnot(None)
+    ).scalar() or 0
+    
+    # Get images with embeddings
+    images_with_embeddings = db.query(func.count(KBImage.id)).filter(
+        KBImage.org_id == org_id,
+        KBImage.visual_embedding.isnot(None)
+    ).scalar() or 0
+    
     return {
         "total_sources": total_sources,
         "sources_by_status": sources_by_status,
         "sources_by_category": sources_by_category,
-        "total_chunks": total_chunks
+        "total_chunks": total_chunks,
+        "total_images": total_images,
+        "chunks_with_embeddings": chunks_with_embeddings,
+        "images_with_embeddings": images_with_embeddings
     }
 

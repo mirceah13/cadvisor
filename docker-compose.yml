@@ -124,6 +124,8 @@ services:
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
       - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL}
       - CORS_ORIGINS=${CORS_ORIGINS}
+      - APS_CLIENT_ID=${APS_CLIENT_ID}
+      - APS_CLIENT_SECRET=${APS_CLIENT_SECRET}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
@@ -210,6 +212,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
       - AI_SERVICE_BASE_URL=${AI_SERVICE_BASE_URL:-http://localhost:8001}
+      - APS_CLIENT_ID=${APS_CLIENT_ID}
+      - APS_CLIENT_SECRET=${APS_CLIENT_SECRET}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - ./services/api:/app

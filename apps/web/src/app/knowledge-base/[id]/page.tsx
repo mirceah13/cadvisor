@@ -18,7 +18,13 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
-  Loader2
+  Loader2,
+  Image,
+  Database,
+  Clock,
+  FileType,
+  CheckCircle2,
+  TrendingUp
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -41,6 +47,11 @@ interface KnowledgeSource {
   file_id?: string
   url?: string
   chunks_count?: number
+  images_count?: number
+  chunks_with_embeddings?: number
+  images_with_embeddings?: number
+  text_length?: number
+  processing_time?: number
   created_at: string
   meta_data?: {
     progress?: {
@@ -389,85 +400,399 @@ export default function KnowledgeBaseDetailPage() {
             )}
 
             {/* Statistics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Database className="h-4 w-4" />
                     Status
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold capitalize">{source.status}</p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Text Chunks
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">
-                    {source.chunks_count || 0}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {source.status === 'indexed' && '✅ Ready for queries'}
+                    {source.status === 'processing' && '⏳ In progress'}
+                    {source.status === 'failed' && '❌ Processing failed'}
+                    {source.status === 'uploaded' && '📤 Awaiting processing'}
                   </p>
                 </CardContent>
               </Card>
               
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Text Chunks
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {source.chunks_count?.toLocaleString() || 0}
+                  </p>
+                  {source.chunks_with_embeddings !== undefined && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {source.chunks_with_embeddings.toLocaleString()} with embeddings ({source.chunks_count ? Math.round((source.chunks_with_embeddings / source.chunks_count) * 100) : 0}%)
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Image className="h-4 w-4" />
+                    Images
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {source.images_count?.toLocaleString() || 0}
+                  </p>
+                  {source.images_with_embeddings !== undefined && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {source.images_with_embeddings.toLocaleString()} with embeddings ({source.images_count ? Math.round((source.images_with_embeddings / source.images_count) * 100) : 0}%)
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <FileType className="h-4 w-4" />
                     Source Type
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold capitalize">{source.source_type}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {categoryLabels[source.category] || source.category}
+                  </p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Details */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Details</h3>
-              <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Category</dt>
-                  <dd className="mt-1 text-sm">
-                    {categoryLabels[source.category] || source.category}
-                  </dd>
-                </div>
-                
-                {source.file_id && (
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">File ID</dt>
-                    <dd className="mt-1 text-sm font-mono text-xs">{source.file_id}</dd>
-                  </div>
+            {/* Additional Metrics */}
+            {(source.text_length || source.processing_time) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {source.text_length && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Total Text Length
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">
+                        {(source.text_length / 1000).toFixed(1)}K
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {source.text_length.toLocaleString()} characters
+                      </p>
+                    </CardContent>
+                  </Card>
                 )}
-                
-                {source.url && (
+
+                {source.processing_time && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Processing Time
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">
+                        {Math.floor(source.processing_time / 60)}m {Math.round(source.processing_time % 60)}s
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {source.processing_time.toFixed(2)} seconds total
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* Visual Analytics */}
+            {source.status === 'indexed' && source.chunks_count && source.chunks_count > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Content Analytics</CardTitle>
+                  <CardDescription>Embedding generation success rates and content breakdown</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  {/* Success Rate Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Text Chunks Progress */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-emerald-500/10">
+                            <FileText className="h-5 w-5 text-emerald-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold">Text Chunks</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {source.chunks_with_embeddings?.toLocaleString()} / {source.chunks_count?.toLocaleString()} embedded
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-emerald-600">
+                            {source.chunks_count ? Math.round((source.chunks_with_embeddings || 0) / source.chunks_count * 100) : 0}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">success</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="relative h-4 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                          <div 
+                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-500 to-green-600 rounded-full transition-all duration-1000 ease-out"
+                            style={{ 
+                              width: `${source.chunks_count ? ((source.chunks_with_embeddings || 0) / source.chunks_count * 100) : 0}%` 
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{source.chunks_with_embeddings?.toLocaleString()} with embeddings</span>
+                          <span>{((source.chunks_count || 0) - (source.chunks_with_embeddings || 0)).toLocaleString()} failed</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Images Progress */}
+                    {source.images_count && source.images_count > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-blue-500/10">
+                              <Image className="h-5 w-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">Images</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {source.images_with_embeddings?.toLocaleString()} / {source.images_count?.toLocaleString()} embedded
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-blue-600">
+                              {source.images_count ? Math.round((source.images_with_embeddings || 0) / source.images_count * 100) : 0}%
+                            </p>
+                            <p className="text-xs text-muted-foreground">success</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="relative h-4 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                            <div 
+                              className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
+                              style={{ 
+                                width: `${source.images_count ? ((source.images_with_embeddings || 0) / source.images_count * 100) : 0}%` 
+                              }}
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>{source.images_with_embeddings?.toLocaleString()} with embeddings</span>
+                            <span>{((source.images_count || 0) - (source.images_with_embeddings || 0)).toLocaleString()} failed</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Comparison Stats */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t">
+                    <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 p-4">
+                      <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full -mr-10 -mt-10" />
+                      <div className="relative">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Text Chunks</p>
+                        <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                          {source.chunks_count?.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {source.chunks_with_embeddings?.toLocaleString()} embedded
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-4">
+                      <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full -mr-10 -mt-10" />
+                      <div className="relative">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Images</p>
+                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                          {source.images_count?.toLocaleString() || 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {source.images_with_embeddings?.toLocaleString() || 0} embedded
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 p-4">
+                      <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full -mr-10 -mt-10" />
+                      <div className="relative">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Total Items</p>
+                        <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                          {((source.chunks_count || 0) + (source.images_count || 0)).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          chunks + images
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-4">
+                      <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full -mr-10 -mt-10" />
+                      <div className="relative">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Embeddings</p>
+                        <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+                          {((source.chunks_with_embeddings || 0) + (source.images_with_embeddings || 0)).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          generated successfully
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Overall Success Indicator */}
+                  <div className="relative overflow-hidden rounded-lg border bg-gradient-to-r from-emerald-500/5 via-blue-500/5 to-purple-500/5 p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Overall Processing Success</p>
+                        <p className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
+                          {Math.round((((source.chunks_with_embeddings || 0) + (source.images_with_embeddings || 0)) / ((source.chunks_count || 0) + (source.images_count || 0))) * 100)}%
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-emerald-600">
+                        <CheckCircle2 className="h-8 w-8" />
+                        <span className="text-sm font-medium">Ready for Search</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500 rounded-full transition-all duration-1000"
+                        style={{ 
+                          width: `${Math.round((((source.chunks_with_embeddings || 0) + (source.images_with_embeddings || 0)) / ((source.chunks_count || 0) + (source.images_count || 0))) * 100)}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Document Details</CardTitle>
+                <CardDescription>Metadata and additional information</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <dt className="text-sm font-medium text-muted-foreground">URL</dt>
-                    <dd className="mt-1 text-sm">
-                      <a 
-                        href={source.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        {source.url}
-                      </a>
+                    <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                      <Tag className="h-4 w-4" />
+                      Category
+                    </dt>
+                    <dd className="text-sm font-medium">
+                      {categoryLabels[source.category] || source.category}
                     </dd>
                   </div>
-                )}
-                
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Created</dt>
-                  <dd className="mt-1 text-sm">
-                    {new Date(source.created_at).toLocaleString()}
-                  </dd>
-                </div>
-              </dl>
-            </div>
+                  
+                  {source.file_id && (
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                        <FileText className="h-4 w-4" />
+                        File ID
+                      </dt>
+                      <dd className="text-xs font-mono bg-muted p-2 rounded">{source.file_id}</dd>
+                    </div>
+                  )}
+                  
+                  {source.url && (
+                    <div className="md:col-span-2">
+                      <dt className="text-sm font-medium text-muted-foreground mb-1">URL</dt>
+                      <dd className="text-sm">
+                        <a 
+                          href={source.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline break-all"
+                        >
+                          {source.url}
+                        </a>
+                      </dd>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                      <Calendar className="h-4 w-4" />
+                      Created
+                    </dt>
+                    <dd className="text-sm">
+                      {new Date(source.created_at).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </dd>
+                  </div>
+
+                  {source.text_length && (
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                        <TrendingUp className="h-4 w-4" />
+                        Average Chunk Size
+                      </dt>
+                      <dd className="text-sm font-medium">
+                        {source.chunks_count ? Math.round(source.text_length / source.chunks_count) : 0} characters
+                      </dd>
+                    </div>
+                  )}
+
+                  {source.chunks_count && source.images_count && (
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Text to Image Ratio
+                      </dt>
+                      <dd className="text-sm font-medium">
+                        {(source.chunks_count / source.images_count).toFixed(2)}:1
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({source.chunks_count} chunks / {source.images_count} images)
+                        </span>
+                      </dd>
+                    </div>
+                  )}
+
+                  {source.processing_time && source.chunks_count && (
+                    <div>
+                      <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                        <Clock className="h-4 w-4" />
+                        Processing Speed
+                      </dt>
+                      <dd className="text-sm font-medium">
+                        {(source.chunks_count / source.processing_time * 60).toFixed(1)} chunks/min
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({(source.processing_time / source.chunks_count).toFixed(2)}s per chunk)
+                        </span>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
 
             {/* Processing Status Info */}
             {source.status === 'processing' && (

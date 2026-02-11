@@ -168,7 +168,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t py-8">
         <div className="container text-center text-sm text-muted-foreground">
-          <p>&copy; 2025 CADVisor. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} CADVisor. All rights reserved.</p>
         </div>
       </footer>
     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { useAuth } from '@/hooks/use-auth'
@@ -12,19 +12,27 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Upload, X, FileText } from 'lucide-react'
-import Link from 'next/link'
-import { LoadingLink } from '@/components/loading-link'
+import { ArrowLeft, Loader2, Upload, X, FileText, CheckCircle2, AlertCircle } from 'lucide-react'
+
+interface UploadedFile {
+  id: string
+  name: string
+  status: 'uploading' | 'parsing' | 'completed' | 'failed'
+  metadata?: any
+}
 
 export default function NewSubmissionPage() {
   const router = useLoadingRouter()
   const searchParams = useSearchParams()
   const { accessToken } = useAuth()
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null)
   
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [projects, setProjects] = useState<any[]>([])
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [submissionId, setSubmissionId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -36,11 +44,78 @@ export default function NewSubmissionPage() {
     fetchProjects()
   }, [accessToken])
 
-  const fetchProjects = async () => {
-    if (!accessToken) return
+  useEffect(() => {
+    // Clean up polling interval on unmount
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current)
+      }
+    }
+  }, [])
+
+  const checkFileParsingStatus = async () => {
+    if (!submissionId) {
+      console.log('No submissionId, skipping status check')
+      return
+    }
 
     try {
-      // Don't pass Authorization header - the apiClient interceptor handles it
+      console.log('Checking file parsing status for submission:', submissionId)
+      const response: any = await apiClient.get(`/submissions/${submissionId}/processing-status`)
+      const data = response.data || response
+      
+      console.log('Processing status response:', data)
+      
+      if (data.files && data.files.length > 0) {
+        // Always update all files from server response
+        const updatedFiles = data.files.map((serverFile: any) => {
+          const existingFile = uploadedFiles.find(uf => uf.id === serverFile.file_id) || {
+            id: serverFile.file_id,
+            name: serverFile.filename,
+            status: 'parsing' as const
+          }
+          const status = serverFile.processing_status
+          console.log(`File ${serverFile.filename} status:`, status)
+          
+          if (status === 'completed' || status === 'partial') {
+            return { ...existingFile, status: 'completed' as const, metadata: serverFile }
+          } else if (status === 'failed') {
+            return { ...existingFile, status: 'failed' as const, error: serverFile.error }
+          } else if (status === 'processing') {
+            return { ...existingFile, status: 'parsing' as const }
+          } else {
+            return { ...existingFile, status: 'parsing' as const }
+          }
+        })
+        
+        setUploadedFiles(updatedFiles)
+
+        // Check if all files are done processing
+        const allDone = updatedFiles.every(f => f.status === 'completed' || f.status === 'failed')
+        if (allDone && pollingInterval.current) {
+          clearInterval(pollingInterval.current)
+          pollingInterval.current = null
+          console.log('All files processed, will redirect shortly')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check file status:', error)
+      // On error, continue anyway after 10s
+      if (pollingInterval.current && uploadedFiles.length > 0) {
+        setTimeout(() => {
+          if (pollingInterval.current) {
+            clearInterval(pollingInterval.current)
+            pollingInterval.current = null
+            setUploadedFiles(prev => prev.map(f => ({ ...f, status: 'completed' as const })))
+          }
+        }, 10000)
+      }
+    }
+  }
+
+  const fetchProjects = async () => {
+    if (!accessToken) return
+    try {
       const response: any = await apiClient.get('/projects')
       setProjects(response.data || response || [])
     } catch (error) {
@@ -59,46 +134,10 @@ export default function NewSubmissionPage() {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const uploadFiles = async (submissionId: string) => {
-    if (selectedFiles.length === 0) return
-
-    setUploading(true)
-    try {
-      const uploadPromises = selectedFiles.map(async (file) => {
-        const formData = new FormData()
-        formData.append('file', file)
-        if (submissionId) {
-          formData.append('submission_id', submissionId)
-        }
-
-        try {
-          // Don't pass Authorization header - the apiClient interceptor handles it
-          await apiClient.post('/files/upload', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          })
-        } catch (error: any) {
-          console.error(`Failed to upload ${file.name}:`, error)
-          console.error('Error details:', error.response?.data)
-          throw error
-        }
-      })
-
-      await Promise.all(uploadPromises)
-    } catch (error) {
-      console.error('Upload failed:', error)
-      throw error
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     
     if (!accessToken) {
-      console.error('No access token available')
       alert('You must be logged in to create a submission')
       return
     }
@@ -116,41 +155,98 @@ export default function NewSubmissionPage() {
         payload.project_id = formData.project_id
       }
 
-      console.log('Creating submission with payload:', payload)
-      console.log('Using access token:', accessToken ? 'Present' : 'Missing')
-      console.log('API URL:', process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-      
-      // Don't pass Authorization header - the apiClient interceptor handles it
       const response: any = await apiClient.post('/submissions', payload)
-
-      console.log('Response received:', response)
       const submission = response.data || response
-      console.log('Submission created:', submission)
+      setSubmissionId(submission.id)
 
-      // Upload files if any were selected
+      // Upload files if any
       if (selectedFiles.length > 0) {
-        console.log('Uploading files...')
-        try {
-          await uploadFiles(submission.id)
-          console.log('Files uploaded successfully')
-        } catch (uploadError) {
-          console.error('File upload failed, but submission was created:', uploadError)
-          alert('Submission created but some files failed to upload. You can upload them from the submission detail page.')
+        setUploading(true)
+        const uploaded: UploadedFile[] = []
+        
+        for (const file of selectedFiles) {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('submission_id', submission.id)
+          
+          try {
+            const fileResponse: any = await apiClient.post('/files/upload', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            })
+            const uploadedFile = fileResponse.data || fileResponse
+            uploaded.push({
+              id: uploadedFile.id,
+              name: file.name,
+              status: 'parsing',
+              uploadTime: Date.now()
+            } as any)
+          } catch (error) {
+            console.error(`Failed to upload ${file.name}:`, error)
+            uploaded.push({
+              id: Math.random().toString(),
+              name: file.name,
+              status: 'failed'
+            })
+          }
         }
+        
+        setUploadedFiles(uploaded)
+        setUploading(false)
+        
+        // Start polling for file parsing status immediately
+        // Use setTimeout to ensure state has updated
+        setTimeout(() => {
+          checkFileParsingStatus()
+          pollingInterval.current = setInterval(checkFileParsingStatus, 2000)
+        }, 100)
+      } else {
+        // No files, navigate immediately
+        router.push(`/submissions/${submission.id}`)
       }
-
-      console.log('Redirecting to:', `/submissions/${submission.id}`)
-      router.push(`/submissions/${submission.id}`)
     } catch (error: any) {
       console.error('Failed to create submission:', error)
-      console.error('Error response:', error.response?.data)
-      console.error('Error status:', error.response?.status)
-      console.error('Error message:', error.message)
       alert(error.response?.data?.detail || error.message || 'Failed to create submission')
-    } finally {
       setLoading(false)
     }
   }
+
+  const handleContinue = () => {
+    if (submissionId) {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current)
+      }
+      router.push(`/submissions/${submissionId}`)
+    }
+  }
+
+  const allFilesProcessed = uploadedFiles.length > 0 && 
+    uploadedFiles.every(f => f.status === 'completed' || f.status === 'failed')
+
+  // Auto-redirect when all files are processed
+  useEffect(() => {
+    if (allFilesProcessed && submissionId) {
+      // Wait 1.5 seconds to show success state, then redirect
+      const redirectTimer = setTimeout(() => {
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current)
+        }
+        router.push(`/submissions/${submissionId}`)
+      }, 1500)
+      
+      return () => clearTimeout(redirectTimer)
+    }
+  }, [allFilesProcessed, submissionId, router])
+
+  // Fallback: Show continue button after 2 minutes of waiting
+  const [showContinueButton, setShowContinueButton] = useState(false)
+  useEffect(() => {
+    if (uploadedFiles.length > 0 && !allFilesProcessed) {
+      const timer = setTimeout(() => {
+        setShowContinueButton(true)
+      }, 120000) // 2 minutes
+      return () => clearTimeout(timer)
+    }
+  }, [uploadedFiles.length, allFilesProcessed])
 
   return (
     <>
@@ -163,200 +259,260 @@ export default function NewSubmissionPage() {
             <Button 
               variant="ghost" 
               onClick={() => router.push('/submissions')}
-              className="mb-4 text-white hover:bg-white/10 hover:text-white"
+              className="mb-4 text-white hover:bg-white/10"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Submissions
             </Button>
             
             <div className="flex items-center gap-4">
-              <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm">
                 <Upload className="h-8 w-8" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">Create New Submission</h1>
-                <p className="text-white/80 mt-1">
-                  Upload CAD files for automated compliance analysis
-                </p>
+                <h1 className="text-3xl font-bold tracking-tight">New Submission</h1>
+                <p className="text-white/80">Upload architectural plans for comprehensive analysis</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="container max-w-3xl p-8">
-          <Card className="border-2">
-            <CardHeader className="bg-gradient-to-br from-primary/5 to-primary/10">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                Submission Details
-              </CardTitle>
+        {/* Form Section */}
+        <div className="container py-8 px-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Submission Details</CardTitle>
               <CardDescription>
-                Provide information about your submission for better organization and analysis
+                Provide information about your architectural submission
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="name">Submission Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Office Building - Floor Plans"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Submission Name *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      placeholder="e.g., Office Building Phase 2"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Optional description of this submission..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      placeholder="Optional description..."
+                      rows={3}
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="building_type">Building Type</Label>
-                <Select
-                  value={formData.building_type}
-                  onValueChange={(value) => setFormData({ ...formData, building_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="residential">Residential</SelectItem>
-                    <SelectItem value="commercial">Commercial</SelectItem>
-                    <SelectItem value="industrial">Industrial</SelectItem>
-                    <SelectItem value="mixed_use">Mixed Use</SelectItem>
-                    <SelectItem value="institutional">Institutional</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="project">Project (Optional)</Label>
-                <Select
-                  value={formData.project_id || undefined}
-                  onValueChange={(value) => setFormData({ ...formData, project_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a project (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">
-                  Link this submission to a project for better organization
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>CAD Files (Optional)</Label>
-                <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    multiple
-                    accept=".dwg,.dxf,.ifc,.pdf"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="file-upload"
-                    className="cursor-pointer flex flex-col items-center gap-3"
-                  >
-                    <div className="rounded-full bg-primary/10 p-4">
-                      <Upload className="h-8 w-8 text-primary" />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="building_type">Building Type</Label>
+                      <Select
+                        value={formData.building_type}
+                        onValueChange={(value) => setFormData({...formData, building_type: value})}
+                      >
+                        <SelectTrigger id="building_type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="residential">Residential</SelectItem>
+                          <SelectItem value="commercial">Commercial</SelectItem>
+                          <SelectItem value="industrial">Industrial</SelectItem>
+                          <SelectItem value="mixed_use">Mixed Use</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">Click to upload or drag and drop</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        DWG, DXF, IFC, PDF up to 50MB each
-                      </p>
-                    </div>
-                  </label>
-                </div>
 
-                {selectedFiles.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">Selected files</p>
-                      <Badge variant="secondary">{selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</Badge>
-                    </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {selectedFiles.map((file, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
-                        >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="rounded-lg bg-primary/10 p-2">
-                              <FileText className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{file.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {(file.size / 1024 / 1024).toFixed(2)} MB
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFile(index)}
-                            className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                    <div className="space-y-2">
+                      <Label htmlFor="project">Project (Optional)</Label>
+                      <Select
+                        value={formData.project_id || undefined}
+                        onValueChange={(value) => setFormData({...formData, project_id: value})}
+                      >
+                        <SelectTrigger id="project">
+                          <SelectValue placeholder="No project selected" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {projects.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              {project.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                )}
-                <p className="text-xs text-muted-foreground flex items-center gap-2">
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  You can also upload files after creating the submission
-                </p>
-              </div>
 
-              <div className="flex gap-3 pt-4 border-t">
-                <Button 
-                  type="submit" 
-                  disabled={loading || uploading}
-                  className="bg-primary hover:bg-primary/90 flex-1"
-                  size="lg"
-                >
-                  {(loading || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {uploading ? 'Uploading Files...' : loading ? 'Creating...' : 'Create Submission'}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => router.back()}
-                  disabled={loading || uploading}
-                  size="lg"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                  <div className="space-y-2">
+                    <Label>Files</Label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('file-input')?.click()}
+                        className="w-full"
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Select Files
+                      </Button>
+                      <input
+                        id="file-input"
+                        type="file"
+                        multiple
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept=".dwg,.dxf,.ifc,.pdf"
+                      />
+                    </div>
+                    
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="flex items-center gap-2 rounded-lg border p-3">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="flex-1 text-sm">{file.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeFile(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="submit"
+                    disabled={loading || uploading || !formData.name}
+                    className="flex-1"
+                  >
+                    {loading || uploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {uploading ? 'Uploading files...' : 'Creating...'}
+                      </>
+                    ) : (
+                      'Create Submission'
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.push('/submissions')}
+                    disabled={loading || uploading}
+                    size="lg"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* File Processing Status */}
+          {uploadedFiles.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {allFilesProcessed ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  )}
+                  File Processing
+                </CardTitle>
+                <CardDescription>
+                  {allFilesProcessed 
+                    ? 'All files have been processed. You can now continue.' 
+                    : 'Please wait while your files are being processed...'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center gap-3 rounded-lg border p-3">
+                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{file.name}</p>
+                        {file.status === 'parsing' && (
+                          <p className="text-xs text-muted-foreground">Parsing file...</p>
+                        )}
+                        {file.status === 'completed' && file.metadata && (
+                          <p className="text-xs text-green-600">
+                            {file.metadata.processing_status === 'partial' 
+                              ? 'Parsed with warnings' 
+                              : 'Successfully parsed'}
+                          </p>
+                        )}
+                        {file.status === 'failed' && (
+                          <p className="text-xs text-destructive">
+                            {file.metadata?.message || 'Processing failed'}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0">
+                        {file.status === 'parsing' && (
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        )}
+                        {file.status === 'completed' && (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        )}
+                        {file.status === 'failed' && (
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex gap-2">
+                  <Button
+                    onClick={handleContinue}
+                    disabled={!allFilesProcessed && !showContinueButton}
+                    className="flex-1"
+                    variant={showContinueButton && !allFilesProcessed ? "outline" : "default"}
+                  >
+                    {allFilesProcessed ? (
+                      'Continue to Submission'
+                    ) : showContinueButton ? (
+                      <>
+                        <AlertCircle className="mr-2 h-4 w-4" />
+                        Continue Anyway
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing files...
+                      </>
+                    )}
+                  </Button>
+                  {allFilesProcessed && (
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push('/submissions')}
+                    >
+                      Back to List
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </>
   )
 }
-

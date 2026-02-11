@@ -8,10 +8,11 @@ from typing import List, Dict, Any, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.models import Submission, AnalysisRun, Finding, Ruleset
+from app.models import Submission, AnalysisRun, Finding, Ruleset, File
 from app.services.knowledge_base import KnowledgeBaseService
 from app.services.llm import LLMService
 from app.services.submission_profile import SubmissionProfileGenerator
+from app.services.fire_safety_analyzer import FireSafetyAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class AnalysisEngine:
         self.kb_service = KnowledgeBaseService(db)
         self.llm_service = LLMService()
         self.profile_generator = SubmissionProfileGenerator(db)
+        self.fire_safety_analyzer = FireSafetyAnalyzer()
     
     async def analyze_submission(
         self,
@@ -218,6 +220,16 @@ class AnalysisEngine:
         
         org_id = submission.project.org_id
         
+        # Special handling for fire safety - use specialized analyzer
+        if check_type == "fire_safety":
+            return await self._run_fire_safety_check(
+                submission_id=submission_id,
+                profile=profile,
+                org_id=org_id,
+                analysis_run_id=analysis_run_id,
+                progress_callback=progress_callback
+            )
+        
         # Build search query based on check type
         query = self._build_check_query(check_type, profile)
         
@@ -284,6 +296,113 @@ class AnalysisEngine:
         logger.info(f"Created {len(findings)} findings for {check_type}")
         return findings
     
+    async def _run_fire_safety_check(
+        self,
+        submission_id: UUID,
+        profile: Dict[str, Any],
+        org_id: UUID,
+        analysis_run_id: UUID,
+        progress_callback: Optional[callable] = None
+    ) -> List[Finding]:
+        """Run specialized fire safety check with CAD analysis"""
+        
+        logger.info(f"Running specialized fire safety check for submission {submission_id}")
+        
+        # Get CAD files metadata
+        files = self.db.query(File).filter(
+            File.submission_id == submission_id
+        ).all()
+        
+        cad_files_metadata = []
+        for file in files:
+            # Check if it's a CAD file or PDF
+            file_ext = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
+            if file_ext in ["dwg", "dxf", "ifc", "pdf"]:
+                cad_files_metadata.append({
+                    "file_name": file.filename,
+                    "file_type": file_ext,
+                    "data": file.parsed_metadata or {}
+                })
+        
+        if progress_callback:
+            progress_callback(20)
+        
+        # Get knowledge base context for fire safety
+        query = self._build_check_query("fire_safety", profile)
+        context_chunks = await self.kb_service.semantic_search(
+            query=query,
+            org_id=org_id,
+            limit=10,  # Get more context for fire safety
+            category="fire_safety",
+            min_similarity=0.5
+        )
+        
+        # Also search for fire resistance specifically
+        resistance_query = "fire resistance REI EI ratings requirements structural elements walls floors"
+        resistance_context = await self.kb_service.semantic_search(
+            query=resistance_query,
+            org_id=org_id,
+            limit=5,
+            category="fire_safety",
+            min_similarity=0.5
+        )
+        
+        # Combine context
+        all_context = context_chunks + resistance_context
+        
+        if progress_callback:
+            progress_callback(40)
+        
+        # Run specialized fire safety analysis
+        fire_analysis = self.fire_safety_analyzer.analyze_fire_safety(
+            submission_profile=profile,
+            cad_files_metadata=cad_files_metadata,
+            kb_context=all_context
+        )
+        
+        if progress_callback:
+            progress_callback(70)
+        
+        # Create finding records from fire safety analysis
+        findings = []
+        
+        for finding_data in fire_analysis.get("findings", []):
+            finding = Finding(
+                analysis_run_id=analysis_run_id,
+                severity=finding_data.get("severity", "info"),
+                category="fire_safety",
+                statement=finding_data.get("title", "") + ": " + finding_data.get("description", ""),
+                confidence=finding_data.get("confidence", 0.8),
+                evidence={
+                    "title": finding_data.get("title", ""),
+                    "description": finding_data.get("description", ""),
+                    "location": finding_data.get("location"),
+                    "recommendation": finding_data.get("recommendation"),
+                    "references": finding_data.get("references", []),
+                    "fire_safety_analysis": {
+                        "legend_analysis": fire_analysis.get("legend_analysis", []),
+                        "checks_performed": fire_analysis.get("checks_performed", []),
+                        "compliance_summary": fire_analysis.get("compliance_summary", {})
+                    },
+                    "context_sources": [
+                        c.get("source", {}).get("title", "Unknown")
+                        for c in all_context[:5]
+                    ]
+                },
+                status="pending"
+            )
+            
+            self.db.add(finding)
+            findings.append(finding)
+        
+        self.db.commit()
+        
+        if progress_callback:
+            progress_callback(100)
+        
+        logger.info(f"Fire safety check completed with {len(findings)} findings")
+        return findings
+    
     def _determine_check_types(
         self,
         submission: Submission,
@@ -295,9 +414,14 @@ class AnalysisEngine:
         # Always run basic checks
         check_types.append("general_compliance")
         
-        # Fire safety for all multi-story buildings
+        # Fire safety for CAD files (always run for DWG/DXF/IFC) or multi-story buildings
         building = profile.get("building", {})
-        if building.get("floors", 0) > 1:
+        has_cad_files = any(
+            f.filename.lower().endswith(('.dwg', '.dxf', '.ifc'))
+            for f in submission.files
+        )
+        
+        if has_cad_files or building.get("floors", 0) > 1:
             check_types.append("fire_safety")
         
         # Accessibility checks
@@ -328,16 +452,51 @@ class AnalysisEngine:
         building = profile.get("building", {})
         building_type = building.get("type", "building")
         floors = building.get("floors", 0)
+        area = building.get("area", 0)
         
         queries = {
-            "fire_safety": f"Fire safety requirements for {floors}-story {building_type}, means of egress, fire compartments, sprinkler systems",
-            "accessibility": f"Accessibility requirements, ADA compliance, barrier-free design for {building_type}",
-            "general_compliance": f"Building code requirements for {building_type}, general structural and safety standards",
-            "residential_code": f"Residential building code requirements, IRC standards for {building_type}",
-            "commercial_code": f"Commercial building code requirements, IBC standards for {building_type}",
-            "electrical_code": f"Electrical code requirements, NEC standards for {building_type}",
-            "plumbing_code": f"Plumbing code requirements for {building_type}",
-            "mechanical_code": f"HVAC and mechanical code requirements for {building_type}"
+            "fire_safety": (
+                f"Fire safety requirements for {floors}-story {building_type} with {area}m² area. "
+                f"Fire resistance ratings REI EI requirements for structural elements walls floors. "
+                f"Legenda rezistenta la foc color codes fire compartmentation. "
+                f"Means of egress escape routes stairways fire separation distances. "
+                f"Sprinkler systems smoke detection fire alarm requirements."
+            ),
+            "accessibility": (
+                f"Accessibility requirements barrier-free design for {building_type}. "
+                f"ADA compliance wheelchair access ramps elevators. "
+                f"Door widths corridor widths accessible bathrooms parking spaces."
+            ),
+            "general_compliance": (
+                f"Building code requirements for {floors}-story {building_type}. "
+                f"General structural safety standards construction requirements. "
+                f"Floor height ceiling height room dimensions ventilation lighting."
+            ),
+            "residential_code": (
+                f"Residential building code requirements IRC standards for {building_type}. "
+                f"Room sizes kitchen requirements bathroom requirements bedroom dimensions. "
+                f"Natural light ventilation requirements residential occupancy."
+            ),
+            "commercial_code": (
+                f"Commercial building code requirements IBC standards for {building_type}. "
+                f"Occupancy classification assembly spaces commercial use requirements. "
+                f"Restroom requirements commercial kitchen requirements."
+            ),
+            "electrical_code": (
+                f"Electrical code requirements NEC standards for {building_type}. "
+                f"Electrical service capacity circuit requirements outlet spacing. "
+                f"Emergency lighting exit signs electrical safety."
+            ),
+            "plumbing_code": (
+                f"Plumbing code requirements for {building_type}. "
+                f"Water supply drainage requirements fixture requirements. "
+                f"Pipe sizing backflow prevention plumbing fixtures."
+            ),
+            "mechanical_code": (
+                f"HVAC mechanical code requirements for {building_type}. "
+                f"Heating cooling ventilation requirements air quality. "
+                f"Ductwork requirements mechanical equipment sizing."
+            )
         }
         
         return queries.get(check_type, f"{check_type} requirements for {building_type}")

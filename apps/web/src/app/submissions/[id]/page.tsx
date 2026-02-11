@@ -84,6 +84,9 @@ export default function SubmissionDetailPage() {
   const [lastAnalysisStatus, setLastAnalysisStatus] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [runningAnalysisId, setRunningAnalysisId] = useState<string | null>(null)
+  const [uploadedFilesState, setUploadedFilesState] = useState<{id: string, name: string, status: string, metadata?: any}[]>([])
+  const [isParsingFiles, setIsParsingFiles] = useState(false)
+  const [fileParsingInterval, setFileParsingInterval] = useState<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     fetchSubmission()
@@ -94,6 +97,9 @@ export default function SubmissionDetailPage() {
     return () => {
       if (pollingInterval) {
         clearInterval(pollingInterval)
+      }
+      if (fileParsingInterval) {
+        clearInterval(fileParsingInterval)
       }
     }
   }, [params.id, accessToken])
@@ -267,35 +273,119 @@ export default function SubmissionDetailPage() {
     }
   }
 
+  const checkFileParsingStatus = async () => {
+    if (!accessToken || uploadedFilesState.length === 0) return
+
+    try {
+      const updatedFiles = [...uploadedFilesState]
+      let allDone = true
+
+      for (let i = 0; i < updatedFiles.length; i++) {
+        if (updatedFiles[i].status === 'parsing') {
+          const response: any = await apiClient.get(`/files/${updatedFiles[i].id}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          })
+          const fileData = response.data || response
+
+          if (fileData.parsed_metadata) {
+            const processingStatus = fileData.parsed_metadata.processing_status
+            if (processingStatus === 'completed' || processingStatus === 'partial') {
+              updatedFiles[i].status = 'completed'
+              updatedFiles[i].metadata = fileData.parsed_metadata
+            } else if (processingStatus === 'failed') {
+              updatedFiles[i].status = 'failed'
+              updatedFiles[i].metadata = fileData.parsed_metadata
+            } else {
+              allDone = false
+            }
+          } else {
+            allDone = false
+          }
+        }
+      }
+
+      setUploadedFilesState(updatedFiles)
+
+      // Stop polling if all files are processed
+      if (allDone) {
+        if (fileParsingInterval) {
+          clearInterval(fileParsingInterval)
+          setFileParsingInterval(null)
+        }
+        setIsParsingFiles(false)
+        await fetchFiles() // Refresh the full files list
+        
+        toast({
+          title: "Files Processed",
+          description: "All files have been processed successfully.",
+        })
+      }
+    } catch (error) {
+      console.error('Failed to check parsing status:', error)
+    }
+  }
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files
     if (!selectedFiles || selectedFiles.length === 0 || !accessToken) return
 
     setUploading(true)
+    setIsParsingFiles(true)
+    
     try {
-      const uploadPromises = Array.from(selectedFiles).map(async (file) => {
+      const uploaded: {id: string, name: string, status: string, metadata?: any}[] = []
+      
+      for (const file of selectedFiles) {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('submission_id', params.id as string)
 
-        return apiClient.post('/files/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${accessToken}`
-          }
-        })
-      })
-
-      await Promise.all(uploadPromises)
-      await fetchFiles() // Refresh the files list
+        try {
+          const response: any = await apiClient.post('/files/upload', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              Authorization: `Bearer ${accessToken}`
+            }
+          })
+          const uploadedFile = response.data || response
+          uploaded.push({
+            id: uploadedFile.id,
+            name: file.name,
+            status: 'parsing'
+          })
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error)
+          uploaded.push({
+            id: Math.random().toString(),
+            name: file.name,
+            status: 'failed'
+          })
+        }
+      }
+      
+      setUploadedFilesState(uploaded)
+      setUploading(false)
       
       // Clear the file input
       e.target.value = ''
+      
+      // Start polling for file parsing status
+      const interval = setInterval(checkFileParsingStatus, 2000)
+      setFileParsingInterval(interval)
+      
+      toast({
+        title: "Files Uploaded",
+        description: `${selectedFiles.length} file(s) uploaded. Processing in background...`,
+      })
     } catch (error) {
       console.error('Upload failed:', error)
-      alert('Failed to upload files. Please try again.')
-    } finally {
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: "Failed to upload files. Please try again.",
+      })
       setUploading(false)
+      setIsParsingFiles(false)
     }
   }
 
@@ -438,7 +528,7 @@ export default function SubmissionDetailPage() {
                 </div>
               </div>
               <div className="flex gap-2 ml-4">
-                {!analyzing && files.length > 0 && (
+                {!analyzing && files.length > 0 && !isParsingFiles && (
                   <Button 
                     onClick={handleStartAnalysis}
                     className="bg-white text-primary hover:bg-white/90 shadow-lg"
@@ -447,13 +537,13 @@ export default function SubmissionDetailPage() {
                     Start Analysis
                   </Button>
                 )}
-                {analyzing && (
+                {(analyzing || isParsingFiles) && (
                   <Button 
                     disabled
                     className="bg-white/50 text-primary cursor-not-allowed"
                   >
                     <Clock className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
+                    {isParsingFiles ? 'Processing files...' : 'Analyzing...'}
                   </Button>
                 )}
                 <Button 
@@ -579,17 +669,71 @@ export default function SubmissionDetailPage() {
                       accept=".dwg,.dxf,.ifc,.pdf"
                       onChange={handleFileUpload}
                       className="hidden"
+                      disabled={uploading || isParsingFiles}
                     />
-                    <Button asChild disabled={uploading} className="shadow-sm">
-                      <label htmlFor="file-upload-button" className="cursor-pointer">
+                    <Button asChild disabled={uploading || isParsingFiles} className="shadow-sm">
+                      <label htmlFor="file-upload-button" className={uploading || isParsingFiles ? 'cursor-not-allowed' : 'cursor-pointer'}>
                         <Upload className="mr-2 h-4 w-4" />
-                        {uploading ? 'Uploading...' : 'Upload Files'}
+                        {uploading ? 'Uploading...' : isParsingFiles ? 'Processing...' : 'Upload Files'}
                       </label>
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-6">
+                {/* File Parsing Progress */}
+                {uploadedFilesState.length > 0 && isParsingFiles && (
+                  <Card className="mb-6 border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                        <Clock className="h-5 w-5 animate-spin" />
+                        Processing Files
+                      </CardTitle>
+                      <CardDescription className="text-blue-700 dark:text-blue-300">
+                        Please wait while your files are being parsed...
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {uploadedFilesState.map((file, index) => (
+                          <div key={index} className="flex items-center gap-3 rounded-lg border bg-white dark:bg-blue-950 p-3">
+                            <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              {file.status === 'parsing' && (
+                                <p className="text-xs text-muted-foreground">Parsing file...</p>
+                              )}
+                              {file.status === 'completed' && file.metadata && (
+                                <p className="text-xs text-green-600">
+                                  {file.metadata.processing_status === 'partial' 
+                                    ? 'Parsed with warnings' 
+                                    : 'Successfully parsed'}
+                                </p>
+                              )}
+                              {file.status === 'failed' && (
+                                <p className="text-xs text-destructive">
+                                  {file.metadata?.message || 'Processing failed'}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0">
+                              {file.status === 'parsing' && (
+                                <Clock className="h-4 w-4 animate-spin text-primary" />
+                              )}
+                              {file.status === 'completed' && (
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                              )}
+                              {file.status === 'failed' && (
+                                <AlertCircle className="h-4 w-4 text-destructive" />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
                 {files.length === 0 ? (
                   <div className="text-center py-16">
                     <div className="p-4 bg-primary/10 rounded-full w-24 h-24 mx-auto mb-4 flex items-center justify-center">
@@ -607,10 +751,10 @@ export default function SubmissionDetailPage() {
                       onChange={handleFileUpload}
                       className="hidden"
                     />
-                    <Button asChild disabled={uploading} size="lg" className="shadow-lg">
-                      <label htmlFor="file-upload-first" className="cursor-pointer">
+                    <Button asChild disabled={uploading || isParsingFiles} size="lg" className="shadow-lg">
+                      <label htmlFor="file-upload-first" className={uploading || isParsingFiles ? 'cursor-not-allowed' : 'cursor-pointer'}>
                         <Upload className="mr-2 h-5 w-5" />
-                        {uploading ? 'Uploading...' : 'Upload Your First File'}
+                        {uploading ? 'Uploading...' : isParsingFiles ? 'Processing...' : 'Upload Your First File'}
                       </label>
                     </Button>
                   </div>

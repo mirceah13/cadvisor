@@ -12,12 +12,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Upload, X, FileText, CheckCircle2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, Upload, X, FileText, CheckCircle2, AlertCircle, Clock, RefreshCw } from 'lucide-react'
+import { Progress } from '@/components/ui/progress'
 
 interface UploadedFile {
   id: string
   name: string
-  status: 'uploading' | 'parsing' | 'completed' | 'failed'
+  status: 'uploading' | 'parsing' | 'completed' | 'failed' | 'stuck'
+  uploadProgress?: number
+  parsingStage?: string
+  startTime?: number
   metadata?: any
 }
 
@@ -33,6 +37,7 @@ export default function NewSubmissionPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [submissionId, setSubmissionId] = useState<string | null>(null)
+  const [timerTick, setTimerTick] = useState(0)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -53,63 +58,194 @@ export default function NewSubmissionPage() {
     }
   }, [])
 
+  // Timer to update elapsed time display
+  useEffect(() => {
+    if (uploadedFiles.length > 0 && !allFilesProcessed) {
+      const timer = setInterval(() => {
+        setTimerTick(prev => prev + 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [uploadedFiles.length])
+
+  // Timer to update elapsed time display
+  useEffect(() => {
+    const hasProcessingFiles = uploadedFiles.some(f => f.status === 'uploading' || f.status === 'parsing')
+    if (hasProcessingFiles) {
+      const timer = setInterval(() => {
+        setTimerTick(prev => prev + 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [uploadedFiles])
+
+  const retryFileProcessing = async (fileId: string) => {
+    if (!accessToken) return
+
+    try {
+      await apiClient.post(`/files/${fileId}/retry`, {}, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+      
+      // Update file state to show it's being retried
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileId 
+          ? { ...f, status: 'parsing', parsingStage: 'Queued for processing...', startTime: Date.now() }
+          : f
+      ))
+      
+      // Restart polling if not already running
+      if (!pollingInterval.current && submissionId) {
+        checkFileParsingStatus()
+        pollingInterval.current = setInterval(checkFileParsingStatus, 2000)
+      }
+    } catch (error: any) {
+      console.error('Failed to retry file processing:', error)
+    }
+  }
+
   const checkFileParsingStatus = async () => {
     if (!submissionId) {
-      console.log('No submissionId, skipping status check')
+      console.log('[Progress] No submissionId, skipping status check')
       return
     }
 
     try {
-      console.log('Checking file parsing status for submission:', submissionId)
+      console.log('[Progress] Polling for submission:', submissionId)
       const response: any = await apiClient.get(`/submissions/${submissionId}/processing-status`)
       const data = response.data || response
       
-      console.log('Processing status response:', data)
+      console.log('[Progress] Server response:', { 
+        totalFiles: data.files?.length,
+        statuses: data.files?.map((f: any) => ({ name: f.filename, status: f.processing_status }))
+      })
       
-      if (data.files && data.files.length > 0) {
-        // Always update all files from server response
-        const updatedFiles = data.files.map((serverFile: any) => {
-          const existingFile = uploadedFiles.find(uf => uf.id === serverFile.file_id) || {
-            id: serverFile.file_id,
-            name: serverFile.filename,
-            status: 'parsing' as const
-          }
-          const status = serverFile.processing_status
-          console.log(`File ${serverFile.filename} status:`, status)
-          
-          if (status === 'completed' || status === 'partial') {
-            return { ...existingFile, status: 'completed' as const, metadata: serverFile }
-          } else if (status === 'failed') {
-            return { ...existingFile, status: 'failed' as const, error: serverFile.error }
-          } else if (status === 'processing') {
-            return { ...existingFile, status: 'parsing' as const }
-          } else {
-            return { ...existingFile, status: 'parsing' as const }
-          }
-        })
-        
-        setUploadedFiles(updatedFiles)
-
-        // Check if all files are done processing
-        const allDone = updatedFiles.every(f => f.status === 'completed' || f.status === 'failed')
-        if (allDone && pollingInterval.current) {
-          clearInterval(pollingInterval.current)
-          pollingInterval.current = null
-          console.log('All files processed, will redirect shortly')
+      if (!data.files || data.files.length === 0) {
+        console.log('[Progress] No files in response')
+        return
+      }
+      
+      // Rebuild file list from server response with proper timestamp handling
+      let anyUpdated = false
+      const updatedFiles = data.files.map((serverFile: any) => {
+        const existingFile = uploadedFiles.find(uf => uf.id === serverFile.file_id) || {
+          id: serverFile.file_id,
+          name: serverFile.filename,
+          status: 'parsing' as const
         }
+        
+        const status = serverFile.processing_status
+        const oldStatus = existingFile.status
+        
+        console.log(`[Progress] File ${serverFile.filename}: ${status}`)
+        
+        // Use processing_started_at from server if available
+        let startTime = existingFile.startTime
+        if (!startTime && serverFile.processing_started_at) {
+          startTime = new Date(serverFile.processing_started_at).getTime()
+          console.log('[Progress] Set startTime from server:', startTime)
+        } else if (!startTime) {
+          startTime = Date.now()
+        }
+        
+        if (status === 'completed' || status === 'partial') {
+          if (oldStatus !== 'completed') {
+            anyUpdated = true
+            console.log('[Progress] ✓ File completed:', serverFile.filename)
+          }
+          return { 
+            ...existingFile, 
+            status: 'completed' as const, 
+            metadata: serverFile, 
+            parsingStage: 'Completed',
+            startTime
+          }
+        } else if (status === 'failed') {
+          if (oldStatus !== 'failed') {
+            anyUpdated = true
+            console.log('[Progress] ✗ File failed:', serverFile.filename)
+          }
+          return { 
+            ...existingFile, 
+            status: 'failed' as const, 
+            error: serverFile.error, 
+            parsingStage: 'Failed',
+            startTime
+          }
+        } else if (status === 'processing') {
+          // Calculate elapsed time from processing start (not creation!)
+          const elapsed = (Date.now() - startTime) / 1000
+          console.log('[Progress] File processing, elapsed:', elapsed.toFixed(1), 's')
+          
+          // Detect stuck files (> 5 minutes = 300 seconds)
+          if (elapsed > 300) {
+            if (oldStatus !== 'stuck') {
+              anyUpdated = true
+              console.warn('[Progress] ⚠ File appears stuck after', elapsed.toFixed(0), 's')
+            }
+            return {
+              ...existingFile,
+              status: 'stuck' as const,
+              parsingStage: 'Processing appears stuck (task may have been interrupted)',
+              startTime
+            }
+          }
+          
+          // Update stage based on elapsed time
+          let stage = 'Processing file...'
+          if (elapsed < 5) {
+            stage = 'Starting translation...'
+          } else if (elapsed < 40) {
+            stage = 'Translating CAD file to SVF2...'
+          } else {
+            stage = 'Extracting metadata and properties...'
+          }
+          
+          if (existingFile.parsingStage !== stage) {
+            anyUpdated = true
+          }
+          
+          return { 
+            ...existingFile, 
+            status: 'parsing' as const, 
+            parsingStage: stage,
+            startTime
+          }
+        } else {
+          // Pending or unknown status
+          if (oldStatus !== 'parsing' || existingFile.parsingStage !== 'Queued for processing...') {
+            anyUpdated = true
+          }
+          return { 
+            ...existingFile, 
+            status: 'parsing' as const, 
+            parsingStage: 'Queued for processing...',
+            startTime
+          }
+        }
+      })
+      
+      if (anyUpdated) {
+        console.log('[Progress] Updating state with new file statuses')
+        setUploadedFiles(updatedFiles)
+      }
+
+      // Check if all files are done processing
+      const allDone = updatedFiles.every(f => f.status === 'completed' || f.status === 'failed')
+      if (allDone && pollingInterval.current) {
+        console.log('[Progress] All files done, stopping polling')
+        clearInterval(pollingInterval.current)
+        pollingInterval.current = null
+        
+        const failedCount = updatedFiles.filter(f => f.status === 'failed').length
+        const successCount = updatedFiles.filter(f => f.status === 'completed').length
+        console.log(`[Progress] Complete: ${successCount} success, ${failedCount} failed`)
+        
+        // Auto-redirect will be handled by useEffect
       }
     } catch (error) {
-      console.error('Failed to check file status:', error)
-      // On error, continue anyway after 10s
-      if (pollingInterval.current && uploadedFiles.length > 0) {
-        setTimeout(() => {
-          if (pollingInterval.current) {
-            clearInterval(pollingInterval.current)
-            pollingInterval.current = null
-            setUploadedFiles(prev => prev.map(f => ({ ...f, status: 'completed' as const })))
-          }
-        }, 10000)
-      }
+      console.error('[Progress] Failed to check file status:', error)
+      // Continue polling on error - don't auto-complete
     }
   }
 
@@ -164,33 +300,57 @@ export default function NewSubmissionPage() {
         setUploading(true)
         const uploaded: UploadedFile[] = []
         
-        for (const file of selectedFiles) {
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i]
+          const startTime = Date.now()
+          
+          // Add file to uploaded list with uploading status
+          const fileEntry: UploadedFile = {
+            id: `temp-${i}`,
+            name: file.name,
+            status: 'uploading',
+            uploadProgress: 0,
+            startTime
+          }
+          uploaded.push(fileEntry)
+          setUploadedFiles([...uploaded])
+          
           const formData = new FormData()
           formData.append('file', file)
           formData.append('submission_id', submission.id)
           
           try {
+            // Simulate upload progress (actual progress tracking would need axios)
+            const progressInterval = setInterval(() => {
+              setUploadedFiles(prev => prev.map(f => 
+                f.name === file.name && f.status === 'uploading'
+                  ? { ...f, uploadProgress: Math.min((f.uploadProgress || 0) + 10, 90) }
+                  : f
+              ))
+            }, 200)
+            
             const fileResponse: any = await apiClient.post('/files/upload', formData, {
               headers: { 'Content-Type': 'multipart/form-data' }
             })
+            
+            clearInterval(progressInterval)
+            
             const uploadedFile = fileResponse.data || fileResponse
-            uploaded.push({
-              id: uploadedFile.id,
-              name: file.name,
-              status: 'parsing',
-              uploadTime: Date.now()
-            } as any)
+            fileEntry.id = uploadedFile.id
+            fileEntry.status = 'parsing'
+            fileEntry.uploadProgress = 100
+            fileEntry.parsingStage = 'Queued for processing...'
+            uploaded[i] = fileEntry
+            setUploadedFiles([...uploaded])
           } catch (error) {
             console.error(`Failed to upload ${file.name}:`, error)
-            uploaded.push({
-              id: Math.random().toString(),
-              name: file.name,
-              status: 'failed'
-            })
+            fileEntry.status = 'failed'
+            fileEntry.uploadProgress = 0
+            uploaded[i] = fileEntry
+            setUploadedFiles([...uploaded])
           }
         }
         
-        setUploadedFiles(uploaded)
         setUploading(false)
         
         // Start polling for file parsing status immediately
@@ -442,40 +602,144 @@ export default function NewSubmissionPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {uploadedFiles.map((file, index) => (
-                    <div key={index} className="flex items-center gap-3 rounded-lg border p-3">
-                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{file.name}</p>
-                        {file.status === 'parsing' && (
-                          <p className="text-xs text-muted-foreground">Parsing file...</p>
-                        )}
-                        {file.status === 'completed' && file.metadata && (
-                          <p className="text-xs text-green-600">
-                            {file.metadata.processing_status === 'partial' 
-                              ? 'Parsed with warnings' 
-                              : 'Successfully parsed'}
-                          </p>
-                        )}
-                        {file.status === 'failed' && (
-                          <p className="text-xs text-destructive">
-                            {file.metadata?.message || 'Processing failed'}
-                          </p>
-                        )}
+                  {uploadedFiles.map((file, index) => {
+                    const elapsedSeconds = file.startTime ? Math.floor((Date.now() - file.startTime) / 1000) : 0
+                    const elapsedDisplay = elapsedSeconds > 0 ? `${elapsedSeconds}s` : '0s'
+                    
+                    return (
+                      <div key={index} className="rounded-lg border p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {file.status === 'uploading' && (
+                                  <span className="text-xs text-muted-foreground">Uploading...</span>
+                                )}
+                                {file.status === 'parsing' && (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Clock className="h-3 w-3" />
+                                    {elapsedDisplay}
+                                  </div>
+                                )}
+                                {file.status === 'stuck' && (
+                                  <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                                    <AlertCircle className="h-3 w-3" />
+                                    {elapsedDisplay}
+                                  </div>
+                                )}
+                                <div className="flex-shrink-0">
+                                  {(file.status === 'uploading' || file.status === 'parsing') && (
+                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                  )}
+                                  {file.status === 'stuck' && (
+                                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                                  )}
+                                  {file.status === 'completed' && (
+                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                  )}
+                                  {file.status === 'failed' && (
+                                    <AlertCircle className="h-4 w-4 text-destructive" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Upload Progress Bar */}
+                            {file.status === 'uploading' && (
+                              <div className="space-y-1">
+                                <Progress value={file.uploadProgress || 0} className="h-2" />
+                                <p className="text-xs text-muted-foreground">
+                                  {file.uploadProgress || 0}% uploaded
+                                </p>
+                              </div>
+                            )}
+                            
+                            {/* Parsing Status with Progress Indicator */}
+                            {file.status === 'parsing' && (
+                              <div className="space-y-2">
+                                {/* Animated progress bar */}
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+                                    <div 
+                                      className="h-full rounded-full absolute inset-0 bg-gradient-to-r from-blue-400 via-blue-600 to-blue-400"
+                                      style={{ 
+                                        width: '100%',
+                                        animation: 'gradient 3s ease infinite',
+                                        backgroundSize: '200% 100%'
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                                {/* Stage description */}
+                                <div className="flex items-start gap-2">
+                                  <div className="flex-1">
+                                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                      {file.parsingStage || 'Processing file...'}
+                                    </p>
+                                    {file.parsingStage?.includes('Translating') && (
+                                      <p className="text-xs text-muted-foreground mt-0.5">
+                                        This typically takes 30-60 seconds
+                                      </p>
+                                    )}
+                                    {file.parsingStage?.includes('Extracting') && (
+                                      <p className="text-xs text-muted-foreground mt-0.5">
+                                        Extracting CAD properties and metadata
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Stuck File Status with Retry Button */}
+                            {file.status === 'stuck' && (
+                              <div className="space-y-3">
+                                <div className="flex items-start gap-2">
+                                  <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1">
+                                    <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                                      {file.parsingStage || 'Processing appears stuck'}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      The processing task may have been interrupted. You can retry to restart processing.
+                                    </p>
+                                  </div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => retryFileProcessing(file.id)}
+                                  className="w-full border-amber-500 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                                >
+                                  <RefreshCw className="h-3 w-3 mr-2" />
+                                  Retry Processing
+                                </Button>
+                              </div>
+                            )}
+                            
+                            {/* Completion Status */}
+                            {file.status === 'completed' && file.metadata && (
+                              <p className="text-xs text-green-600 font-medium">
+                                ✓ {file.metadata.processing_status === 'partial' 
+                                  ? 'Parsed with warnings' 
+                                  : 'Successfully parsed'}
+                                {elapsedSeconds > 0 && ` in ${elapsedDisplay}`}
+                              </p>
+                            )}
+                            
+                            {/* Error Status */}
+                            {file.status === 'failed' && (
+                              <p className="text-xs text-destructive font-medium">
+                                ✗ {file.metadata?.message || 'Processing failed'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex-shrink-0">
-                        {file.status === 'parsing' && (
-                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                        )}
-                        {file.status === 'completed' && (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        )}
-                        {file.status === 'failed' && (
-                          <AlertCircle className="h-4 w-4 text-destructive" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 <div className="mt-6 flex gap-2">

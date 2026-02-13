@@ -10,6 +10,7 @@ from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 import hashlib
+from datetime import datetime, timedelta, timezone
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -349,12 +350,112 @@ def list_files(
             scan_status=f.scan_status,
             uploaded_by=f.uploaded_by,
             submission_id=f.submission_id,
-            status=f.scan_status or "pending",
+            status=(f.parsed_metadata or {}).get("processing_status", "pending"),  # Use processing status, not scan status
             created_at=f.created_at.isoformat(),
             file_metadata=f.parsed_metadata
         )
         for f in files
     ]
+
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_file(
+    file_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a file
+    
+    - Soft deletes the file
+    - Removes it from submission
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_membership = current_user.org_memberships[0]
+    org_id = org_membership.org_id
+    
+    # Get file and verify access
+    file_service = FileService(db)
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.org_id == org_id,
+        File.is_deleted == False
+    ).first()
+    
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    # Soft delete
+    from datetime import datetime, timezone
+    file.is_deleted = True
+    file.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    
+    return None
+
+@router.post("/{file_id}/retry")
+def retry_file_processing(
+    file_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retry processing for a stuck or failed file
+    
+    - Resets file status to pending and queues processing task
+    - Useful for files stuck in 'processing' state due to worker crashes
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_membership = current_user.org_memberships[0]
+    org_id = org_membership.org_id
+    
+    file_service = FileService(db)
+    file = file_service.get_file(file_id=file_id, org_id=org_id)
+    
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    # Check if it's a CAD file
+    if not _is_cad_file(file.mime_type, file.filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only CAD files can be reprocessed"
+        )
+    
+    # Reset file metadata to pending status
+    file.file_metadata = file.file_metadata or {}
+    file.file_metadata["processing_status"] = "pending"
+    file.file_metadata["retry_requested_at"] = datetime.now(timezone.utc).isoformat()
+    file.file_metadata.pop("processing_started_at", None)
+    file.file_metadata.pop("processing_completed_at", None)
+    file.file_metadata.pop("error", None)
+    
+    db.commit()
+    
+    # Queue processing task
+    task = process_cad_file.delay(str(file_id))
+    
+    return {
+        "message": "File processing queued",
+        "file_id": str(file_id),
+        "task_id": task.id,
+        "status": "pending"
+    }
 
 
 @router.delete("/{file_id}")

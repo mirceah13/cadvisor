@@ -384,3 +384,78 @@ async def delete_submission(
     db.commit()
     
     return None
+
+
+@router.get("/{submission_id}/processing-status")
+def get_processing_status(
+    submission_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get processing status for all files in submission
+    
+    - Shows which files have been parsed
+    - Returns any processing errors
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_membership = current_user.org_memberships[0]
+    org_id = org_membership.org_id
+    
+    # Verify submission access
+    submission = db.query(Submission).filter(
+        Submission.id == submission_id
+    ).join(Project).filter(
+        Project.org_id == org_id  
+    ).first()
+    
+    if not submission:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found"
+        )
+    
+    # Get file processing status
+    from app.models import File
+    files = db.query(File).filter(
+        File.submission_id == submission_id,
+        File.deleted_at.is_(None)
+    ).all()
+    
+    file_statuses = []
+    for file in files:
+        # Processing status is stored in parsed_metadata
+        parsed_metadata = file.parsed_metadata or {}
+        file_statuses.append({
+            "file_id": str(file.id),
+            "filename": file.filename,
+            "mime_type": file.mime_type,
+            "processing_status": parsed_metadata.get("processing_status", "pending"),
+            "processing_started_at": parsed_metadata.get("processing_started_at"),
+            "processing_completed_at": parsed_metadata.get("processing_completed_at"),
+            "task_id": parsed_metadata.get("processing_task_id"),
+            "error": parsed_metadata.get("processing_error"),  # Fixed typo
+        })
+    
+    # Overall submission status
+    total = len(files)
+    completed = sum(1 for f in file_statuses if f["processing_status"] == "completed")
+    failed = sum(1 for f in file_statuses if f["processing_status"] == "failed")
+    processing = sum(1 for f in file_statuses if f["processing_status"] == "processing")
+    
+    return {
+        "submission_id": str(submission_id),
+        "overall_status": {
+            "total_files": total,
+            "completed": completed,
+            "failed": failed,
+            "processing": processing,
+            "pending": total - completed - failed - processing
+        },
+        "files": file_statuses
+    }

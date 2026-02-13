@@ -205,8 +205,10 @@ def get_processing_status(
             "filename": file.filename,
             "mime_type": file.mime_type,
             "processing_status": parsed_metadata.get("processing_status", "pending"),
+            "processing_started_at": parsed_metadata.get("processing_started_at"),
+            "processing_completed_at": parsed_metadata.get("processing_completed_at"),
             "task_id": parsed_metadata.get("processing_task_id"),
-            "error": parsed_metadata.get("processing_error"),
+            "error": parsed_metadata.get("processing_errorerror"),
         })
     
     # Overall submission status

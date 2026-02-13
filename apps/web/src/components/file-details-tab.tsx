@@ -295,12 +295,37 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
       ) : (
         /* Full Details View */
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="building">Building</TabsTrigger>
-            <TabsTrigger value="geometry">Geometry</TabsTrigger>
-            <TabsTrigger value="parsing">Parsing Report</TabsTrigger>
-            <TabsTrigger value="raw">Raw Data</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5 bg-muted/50 p-1">
+            <TabsTrigger 
+              value="overview"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger 
+              value="building"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+            >
+              Building
+            </TabsTrigger>
+            <TabsTrigger 
+              value="geometry"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+            >
+              Geometry
+            </TabsTrigger>
+            <TabsTrigger 
+              value="parsing"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+            >
+              Parsing Report
+            </TabsTrigger>
+            <TabsTrigger 
+              value="raw"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+            >
+              Raw Data
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -309,37 +334,131 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Info className="h-5 w-5" />
-                  CAD File Metadata
+                  CAD File Overview
                 </CardTitle>
                 <CardDescription>
-                  Automatically extracted information from {selectedFile?.filename}
+                  Key metrics and metadata from {selectedFile?.filename}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+                {/* File Stats Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* File Size */}
+                  <div className="p-4 border rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/30 border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                      {selectedFile?.size_bytes 
+                        ? (selectedFile.size_bytes / 1024 / 1024).toFixed(2) 
+                        : selectedFile?.size 
+                          ? (selectedFile.size / 1024 / 1024).toFixed(2)
+                          : '?'} MB
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">File Size</p>
+                  </div>
+
+                  {/* Format/Version */}
+                  {(metadata.dxf_version || metadata.file_schema || metadata.source_format) && (
+                    <div className="p-4 border rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/30 dark:to-purple-900/30 border-purple-200 dark:border-purple-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Calculator className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                        {metadata.dxf_version || metadata.file_schema || metadata.source_format?.toUpperCase()}
+                      </p>
+                      <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">Format/Version</p>
+                    </div>
+                  )}
+
+                  {/* Entities/Elements */}
+                  {(metadata.entities?.total || metadata.elements?.total_count) && (
+                    <div className="p-4 border rounded-lg bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 border-green-200 dark:border-green-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Box className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                        {metadata.entities?.total || metadata.elements?.total_count || 0}
+                      </p>
+                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">Total Entities</p>
+                    </div>
+                  )}
+
+                  {/* Layers/Storeys */}
+                  {(metadata.layers?.count || metadata.storeys?.count) && (
+                    <div className="p-4 border rounded-lg bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/30 dark:to-orange-900/30 border-orange-200 dark:border-orange-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Layers className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                        {metadata.layers?.count || metadata.storeys?.count || 0}
+                      </p>
+                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                        {metadata.layers?.count ? 'Layers' : 'Storeys'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Entity Breakdown - DWG/DXF */}
+                {metadata.entities?.by_type && Object.keys(metadata.entities.by_type).length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <Grid className="h-4 w-4" />
+                      Entity Types Breakdown
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {Object.entries(metadata.entities.by_type)
+                        .sort(([, a]: any, [, b]: any) => b - a)
+                        .slice(0, 9)
+                        .map(([type, count]: [string, any]) => (
+                          <div key={type} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
+                            <span className="text-sm font-medium capitalize text-foreground">
+                              {type.replace(/_/g, ' ')}
+                            </span>
+                            <Badge variant="secondary">{count}</Badge>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Processing Status */}
+                <div className="p-4 border-2 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-500/20 rounded-full">
+                      <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-green-900 dark:text-green-100">
+                        Processing Complete
+                      </p>
+                      <p className="text-sm text-green-700 dark:text-green-300">
+                        {metadata.processing_started_at && metadata.processing_completed_at ? (
+                          `Completed in ${((new Date(metadata.processing_completed_at).getTime() - new Date(metadata.processing_started_at).getTime()) / 1000).toFixed(1)}s`
+                        ) : (
+                          'File successfully parsed and ready for analysis'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* DXF/DWG Metadata */}
                 {metadata.dxf_version && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-4 border rounded-lg">
-                        <p className="text-lg font-bold">{metadata.dxf_version}</p>
-                        <p className="text-sm text-muted-foreground">DXF Version</p>
-                      </div>
-                      {metadata.layers?.count && (
-                        <div className="text-center p-4 border rounded-lg">
-                          <p className="text-lg font-bold">{metadata.layers.count}</p>
-                          <p className="text-sm text-muted-foreground">Layers</p>
-                        </div>
-                      )}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">Additional DWG/DXF Details</h3>
+                    <div className="grid grid-cols-2 gap-3">
                       {metadata.blocks?.count && (
-                        <div className="text-center p-4 border rounded-lg">
-                          <p className="text-lg font-bold">{metadata.blocks.count}</p>
+                        <div className="p-3 border rounded-lg bg-card">
                           <p className="text-sm text-muted-foreground">Blocks</p>
+                          <p className="text-lg font-bold text-foreground">{metadata.blocks.count}</p>
                         </div>
                       )}
-                      {metadata.entities?.total && (
-                        <div className="text-center p-4 border rounded-lg">
-                          <p className="text-lg font-bold">{metadata.entities.total}</p>
-                          <p className="text-sm text-muted-foreground">Total Entities</p>
+                      {metadata.text?.count && (
+                        <div className="p-3 border rounded-lg bg-card">
+                          <p className="text-sm text-muted-foreground">Text Objects</p>
+                          <p className="text-lg font-bold text-foreground">{metadata.text.count}</p>
                         </div>
                       )}
                     </div>
@@ -348,28 +467,19 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
 
                 {/* IFC Metadata */}
                 {metadata.file_schema && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-4 border rounded-lg">
-                        <p className="text-lg font-bold">{metadata.file_schema}</p>
-                        <p className="text-sm text-muted-foreground">IFC Schema</p>
-                      </div>
-                      {metadata.storeys?.count && (
-                        <div className="text-center p-4 border rounded-lg">
-                          <p className="text-lg font-bold">{metadata.storeys.count}</p>
-                          <p className="text-sm text-muted-foreground">Storeys</p>
-                        </div>
-                      )}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">IFC Model Details</h3>
+                    <div className="grid grid-cols-2 gap-3">
                       {metadata.spaces?.count && (
-                        <div className="text-center p-4 border rounded-lg">
-                          <p className="text-lg font-bold">{metadata.spaces.count}</p>
+                        <div className="p-3 border rounded-lg bg-card">
                           <p className="text-sm text-muted-foreground">Spaces</p>
+                          <p className="text-lg font-bold text-foreground">{metadata.spaces.count}</p>
                         </div>
                       )}
-                      {metadata.elements?.total_count && (
-                        <div className="text-center p-4 border rounded-lg">
-                          <p className="text-lg font-bold">{metadata.elements.total_count}</p>
-                          <p className="text-sm text-muted-foreground">Elements</p>
+                      {metadata.building?.name && (
+                        <div className="p-3 border rounded-lg bg-card">
+                          <p className="text-sm text-muted-foreground">Building Name</p>
+                          <p className="text-base font-semibold text-foreground truncate">{metadata.building.name}</p>
                         </div>
                       )}
                     </div>
@@ -378,11 +488,14 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
 
                 {/* Error State */}
                 {metadata.error && (
-                  <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
-                    <p className="text-sm text-red-600 font-medium mb-1">Processing Error</p>
-                    <p className="text-xs text-red-500">{metadata.error}</p>
+                  <div className="p-4 border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      <p className="text-sm font-semibold text-red-900 dark:text-red-100">Processing Error</p>
+                    </div>
+                    <p className="text-sm text-red-700 dark:text-red-300">{metadata.error}</p>
                     {metadata.message && (
-                      <p className="text-xs text-muted-foreground mt-2">{metadata.message}</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-2">{metadata.message}</p>
                     )}
                   </div>
                 )}
@@ -633,38 +746,41 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 {/* Status Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className={`p-4 border rounded-lg ${
-                    metadata.processing_status === 'completed' ? 'bg-green-50 border-green-200' :
-                    metadata.processing_status === 'partial' ? 'bg-yellow-50 border-yellow-200' :
-                    metadata.processing_status === 'failed' ? 'bg-red-50 border-red-200' :
-                    'bg-gray-50'
+                    metadata.processing_status === 'completed' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800' :
+                    metadata.processing_status === 'partial' ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800' :
+                    metadata.processing_status === 'failed' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' :
+                    'bg-gray-50 dark:bg-gray-900/30'
                   }`}>
                     <div className="flex items-center gap-2 mb-2">
-                      {metadata.processing_status === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-                      {metadata.processing_status === 'partial' && <AlertCircle className="h-5 w-5 text-yellow-600" />}
-                      {metadata.processing_status === 'failed' && <AlertCircle className="h-5 w-5 text-red-600" />}
-                      <span className="font-semibold">Status</span>
+                      {metadata.processing_status === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
+                      {metadata.processing_status === 'partial' && <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />}
+                      {metadata.processing_status === 'failed' && <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
+                      <span className="font-semibold text-foreground">Status</span>
                     </div>
-                    <p className="text-lg font-bold capitalize">
+                    <Badge 
+                      variant={metadata.processing_status === 'completed' ? 'default' : 'secondary'}
+                      className="text-base px-3 py-1"
+                    >
                       {metadata.processing_status || 'Unknown'}
-                    </p>
+                    </Badge>
                   </div>
 
-                  <div className="p-4 border rounded-lg">
+                  <div className="p-4 border rounded-lg bg-card">
                     <div className="flex items-center gap-2 mb-2">
                       <FileText className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-semibold">Format</span>
+                      <span className="font-semibold text-foreground">Format</span>
                     </div>
-                    <p className="text-lg font-bold uppercase">
+                    <p className="text-lg font-bold text-foreground uppercase">
                       {metadata.source_format || metadata.file_type || 'Unknown'}
                     </p>
                   </div>
 
-                  <div className="p-4 border rounded-lg">
+                  <div className="p-4 border rounded-lg bg-card">
                     <div className="flex items-center gap-2 mb-2">
                       <Type className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-semibold">Text Extracted</span>
+                      <span className="font-semibold text-foreground">Text Extracted</span>
                     </div>
-                    <p className="text-lg font-bold">
+                    <p className="text-lg font-bold text-foreground">
                       {metadata.text_annotations?.count || 
                        metadata.text?.count || 
                        (metadata.raw_text_content ? 'Yes' : 'No')}

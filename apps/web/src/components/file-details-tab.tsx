@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { api } from '@/lib/api-client'
 import { 
   Search, 
   FileText, 
@@ -295,7 +296,7 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
       ) : (
         /* Full Details View */
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 bg-muted/50 p-1">
+          <TabsList className="grid w-full grid-cols-6 bg-muted/50 p-1">
             <TabsTrigger 
               value="overview"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
@@ -325,6 +326,12 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
             >
               Raw Data
+            </TabsTrigger>
+            <TabsTrigger 
+              value="aps-raw"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+            >
+              APS Raw
             </TabsTrigger>
           </TabsList>
 
@@ -944,6 +951,80 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[600px] text-xs font-mono">
                   {JSON.stringify(metadata, null, 2)}
                 </pre>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* APS Raw Response Tab */}
+          <TabsContent value="aps-raw" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>APS Raw API Responses</CardTitle>
+                <CardDescription>
+                  Complete unfiltered responses from Autodesk Platform Services APIs - ALL data preserved without truncation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {metadata?.aps_raw_responses?.available ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                            Complete Unfiltered Data Available
+                          </p>
+                          <p className="text-sm text-blue-800 dark:text-blue-200">
+                            Complete APS API responses with ALL objects and properties (unfiltered and untruncated).
+                            Contains {metadata.aps_raw_responses.response_count} complete API response(s).
+                          </p>
+                          {metadata.aps_raw_responses.responses && (
+                            <p className="text-sm text-blue-800 dark:text-blue-200 mt-2">
+                              <strong>Total objects:</strong> {
+                                metadata.aps_raw_responses.responses.reduce((sum: number, resp: any) => {
+                                  return sum + (resp.object_count || 0)
+                                }, 0)
+                              }
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                      <FileText className="h-16 w-16 text-primary" />
+                      <div className="text-center space-y-2">
+                        <p className="font-semibold text-lg">Download Raw APS Data</p>
+                        <p className="text-sm text-muted-foreground max-w-md">
+                          The complete unfiltered APS responses are too large to display in the browser.
+                          Download the JSON file to view all data.
+                        </p>
+                      </div>
+                      <Button
+                        size="lg"
+                        onClick={async () => {
+                          if (!selectedFile?.id) return
+                          try {
+                            const filename = `${selectedFile.filename}_aps_raw.json`
+                            await api.downloadFile(`/files/${selectedFile.id}/aps-raw-download`, filename)
+                          } catch (error) {
+                            console.error('Download failed:', error)
+                          }
+                        }}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Download APS Raw Data (JSON)
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <AlertCircle className="h-12 w-12 text-yellow-500 mb-4" />
+                    <p className="text-muted-foreground text-center">
+                      APS raw responses not available for this file.<br />
+                      Upload a new CAD file to process it with the enhanced APS extraction.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

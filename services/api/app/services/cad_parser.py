@@ -540,14 +540,22 @@ class DXFParser:
                     if status == "success":
                         logger.info(f"APS translation succeeded, extracting metadata via API")
                         
-                        # Step 5: Extract metadata via APS Metadata API
-                        metadata = self._extract_metadata_from_aps(urn, access_token)
+                        # Step 5: Extract metadata via APS Metadata API (Enhanced with fallback)
+                        metadata = self._extract_metadata_from_aps_enhanced(urn, access_token)
                         
                         if metadata:
-                            logger.info(f"Successfully extracted metadata from APS")
+                            logger.info(f"Successfully extracted metadata from APS (enhanced)")
+                            return metadata
+                        
+                        # Fallback to legacy method if enhanced fails
+                        logger.info("Enhanced extraction failed, trying legacy method...")
+                        metadata = self._extract_metadata_from_aps_legacy(urn, access_token)
+                        
+                        if metadata:
+                            logger.info(f"Successfully extracted metadata from APS (legacy)")
                             return metadata
                         else:
-                            logger.error("Failed to extract metadata from APS")
+                            logger.error("Failed to extract metadata from APS (both methods)")
                             return None
                     
                     elif status == "failed":
@@ -570,9 +578,14 @@ class DXFParser:
             logger.error(f"APS API error: {e}")
             return None
     
-    def _extract_metadata_from_aps(self, urn: str, access_token: str) -> Optional[Dict[str, Any]]:
+    def _extract_metadata_from_aps_enhanced(self, urn: str, access_token: str) -> Optional[Dict[str, Any]]:
         """
-        Extract metadata from translated DWG using APS Metadata API.
+        Extract metadata from APS using enhanced Object Tree and Query APIs.
+        This provides hierarchical structure and more granular data extraction.
+        
+        Uses:
+        1. Object Tree API - Gets hierarchical BIM structure with parent-child relationships
+        2. Properties API - Gets detailed properties for all objects
         
         Args:
             urn: Base64-encoded URN of the translated file
@@ -603,8 +616,10 @@ class DXFParser:
                 logger.warning("No model views found in APS metadata")
                 return {"views": [], "objects": []}
             
-            # Step 2: Extract properties from all views
+            # Step 2: Extract Object Tree (hierarchical structure) and Properties from all views
             all_objects = []
+            all_hierarchy = []
+            all_raw_responses = []  # Store complete unfiltered API responses
             view_info = []
             
             for view in metadata_list:
@@ -621,8 +636,39 @@ class DXFParser:
                     "role": view_role
                 })
                 
-                # Get all properties for this view with retry logic
-                properties_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata/{guid}/properties"
+                # Step 2a: Get Object Tree (hierarchical structure) for this view
+                tree_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata/{guid}?forceget=true"
+                tree_response = requests.get(
+                    tree_url,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "x-ads-force": "true"  # Force retrieval even on recoverable failures
+                    },
+                    timeout=120  # Increased timeout for large files
+                )
+                
+                if tree_response.status_code == 200:
+                    tree_data = tree_response.json()
+                    hierarchy = tree_data.get("data", {}).get("objects", [])
+                    node_count = self._count_tree_objects(hierarchy)
+                    logger.info(f"✓ Extracted object tree from view '{view_name}' with {node_count} objects")
+                    all_hierarchy.extend(hierarchy)
+                    # Store raw tree response
+                    all_raw_responses.append({
+                        "view_guid": guid,
+                        "view_name": view_name,
+                        "api_type": "object_tree",
+                        "response": tree_data
+                    })
+                elif tree_response.status_code == 202:
+                    logger.info(f"⟲ Object tree still processing for view '{view_name}', will use properties API")
+                elif tree_response.status_code == 413:
+                    logger.warning(f"⚠ Object tree too large for view '{view_name}' (>800MB), using properties only")
+                else:
+                    logger.warning(f"✗ Failed to get object tree for view '{view_name}': {tree_response.status_code} - {tree_response.text[:200]}")
+                
+                # Step 2b: Get all properties for this view with retry logic
+                properties_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata/{guid}/properties?forceget=true"
                 
                 # Retry up to 6 times (30 seconds total) for properties to be ready
                 max_retries = 6
@@ -631,13 +677,26 @@ class DXFParser:
                 for attempt in range(max_retries):
                     props_response = requests.get(
                         properties_url,
-                        headers={"Authorization": f"Bearer {access_token}"},
-                        timeout=60
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                            "x-ads-force": "true",  # Force retrieval even on recoverable failures
+                            "Accept-Encoding": "gzip"  # Request compression for large responses
+                        },
+                        timeout=120  # Increased timeout for large files
                     )
                     
                     if props_response.status_code == 200:
                         props_data = props_response.json()
                         objects = props_data.get("data", {}).get("collection", [])
+                        
+                        # Store complete raw properties response (unfiltered)
+                        all_raw_responses.append({
+                            "view_guid": guid,
+                            "view_name": view_name,
+                            "api_type": "properties",
+                            "response": props_data,
+                            "object_count": len(objects)
+                        })
                         
                         # Add view context to each object
                         for obj in objects:
@@ -645,25 +704,215 @@ class DXFParser:
                             obj["view_role"] = view_role
                         
                         all_objects.extend(objects)
-                        logger.info(f"Extracted {len(objects)} objects from view '{view_name}'")
+                        logger.info(f"✓ Extracted {len(objects)} objects from view '{view_name}' (response size: {len(props_response.content)} bytes)")
                         break  # Success, exit retry loop
                         
                     elif props_response.status_code == 202:
                         # Properties still processing
                         if attempt < max_retries - 1:
-                            logger.info(f"Properties still processing for view '{view_name}', retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})...")
+                            logger.info(f"⟲ Properties still processing for view '{view_name}', retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})...")
                             time.sleep(retry_delay)
                         else:
-                            logger.warning(f"Properties for view '{view_name}' still not ready after {max_retries} attempts")
+                            logger.warning(f"⚠ Properties for view '{view_name}' still not ready after {max_retries} attempts")
+                    elif props_response.status_code == 413:
+                        logger.error(f"✗ Properties too large for view '{view_name}' (>800MB) - consider using Query API for filtering")
+                        break
                     else:
-                        logger.warning(f"Failed to get properties for view '{view_name}': {props_response.text}")
+                        logger.warning(f"✗ Failed to get properties for view '{view_name}': {props_response.status_code} - {props_response.text[:200]}")
                         break  # Non-retryable error
             
-            # Step 3: Organize and structure the metadata
-            return self._structure_aps_metadata(all_objects, view_info)
+            logger.info(f"📊 Total extraction: {len(all_objects)} objects from {len(view_info)} views, hierarchy nodes: {self._count_tree_objects(all_hierarchy)}")
+            logger.info(f"💾 Stored {len(all_raw_responses)} raw API responses (complete unfiltered data)")
+            
+            # Step 3: Organize and structure the metadata with hierarchy
+            return self._structure_aps_metadata_enhanced(all_objects, view_info, all_hierarchy, all_raw_responses)
             
         except Exception as e:
-            logger.error(f"Error extracting APS metadata: {e}")
+            logger.error(f"Error extracting APS metadata (enhanced): {e}")
+            return None
+    
+    def _count_tree_objects(self, tree_nodes: list) -> int:
+        """
+        Recursively count all objects in the hierarchy tree.
+        
+        Args:
+            tree_nodes: List of tree node objects
+            
+        Returns:
+            Total count of objects in tree
+        """
+        count = len(tree_nodes)
+        for node in tree_nodes:
+            if "objects" in node:
+                count += self._count_tree_objects(node["objects"])
+        return count
+    
+    def _structure_aps_metadata_enhanced(self, objects: list, views: list, hierarchy: list, raw_responses: list = None) -> Dict[str, Any]:
+        """
+        Structure APS metadata with hierarchical information (ENHANCED VERSION).
+        
+        Args:
+            objects: List of objects with properties from APS
+            views: List of model views
+            hierarchy: Hierarchical object tree structure
+            raw_responses: Complete unfiltered API responses from APS
+            
+        Returns:
+            Structured metadata dictionary with hierarchy information
+        """
+        # First get base structure from existing method
+        structured_metadata = self._structure_aps_metadata(objects, views)
+        
+        # Enhance with hierarchy information
+        if hierarchy:
+            structured_metadata["hierarchy"] = {
+                "available": True,
+                "tree": hierarchy[:100],  # Limit to first 100 nodes for database storage
+                "total_nodes": self._count_tree_objects(hierarchy),
+                "note": "Object hierarchy showing parent-child relationships and BIM structure"
+            }
+            structured_metadata["extraction_method"] = "aps_enhanced_api (tree + properties)"
+        
+        # Store complete raw APS responses (unfiltered, all data preserved)
+        if raw_responses:
+            structured_metadata["aps_raw_responses"] = {
+                "available": True,
+                "response_count": len(raw_responses),
+                "responses": raw_responses,
+                "note": "Complete unfiltered API responses from APS - ALL data preserved without truncation",
+                "warning": "This contains the complete dataset which may be very large"
+            }
+        
+        return structured_metadata
+    
+    def _extract_metadata_from_aps_legacy(self, urn: str, access_token: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract metadata from APS using legacy flat properties approach (BACKUP METHOD).
+        Uses the Metadata API to get properties of all objects in flat structure.
+        
+        This is kept as a fallback if the enhanced Object Tree API fails.
+        
+        Args:
+            urn: Base64-encoded URN of the translated file
+            access_token: APS OAuth2 access token
+            
+        Returns:
+            Dictionary with extracted metadata or None
+        """
+        try:
+            import requests
+            
+            # Step 1: List model views (get viewable GUIDs)
+            metadata_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata"
+            views_response = requests.get(
+                metadata_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30
+            )
+            
+            if views_response.status_code != 200:
+                logger.error(f"Failed to get model views (legacy): {views_response.text}")
+                return None
+            
+            views_data = views_response.json()
+            metadata_list = views_data.get("data", {}).get("metadata", [])
+            
+            if not metadata_list:
+                logger.warning("No model views found in APS metadata (legacy)")
+                return {"views": [], "objects": []}
+            
+            # Step 2: Extract properties from all views (flat structure only)
+            all_objects = []
+            all_raw_responses = []  # Store complete unfiltered API responses
+            view_info = []
+            
+            for view in metadata_list:
+                guid = view.get("guid")
+                view_name = view.get("name", "Unnamed")
+                view_role = view.get("role", "unknown")
+                
+                if not guid:
+                    continue
+                
+                view_info.append({
+                    "guid": guid,
+                    "name": view_name,
+                    "role": view_role
+                })
+                
+                # Get all properties for this view with retry logic (LEGACY METHOD WITH FORCEGET)
+                properties_url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/metadata/{guid}/properties?forceget=true"
+                
+                # Retry up to 6 times (30 seconds total) for properties to be ready
+                max_retries = 6
+                retry_delay = 5
+                
+                for attempt in range(max_retries):
+                    props_response = requests.get(
+                        properties_url,
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                            "x-ads-force": "true",  # Force retrieval even on recoverable failures
+                            "Accept-Encoding": "gzip"  # Request compression
+                        },
+                        timeout=120  # Increased timeout
+                    )
+                    
+                    if props_response.status_code == 200:
+                        props_data = props_response.json()
+                        objects = props_data.get("data", {}).get("collection", [])
+                        
+                        # Store complete raw properties response (unfiltered)
+                        all_raw_responses.append({
+                            "view_guid": guid,
+                            "view_name": view_name,
+                            "api_type": "properties",
+                            "response": props_data,
+                            "object_count": len(objects)
+                        })
+                        
+                        # Add view context to each object
+                        for obj in objects:
+                            obj["view_name"] = view_name
+                            obj["view_role"] = view_role
+                        
+                        all_objects.extend(objects)
+                        logger.info(f"✓ [LEGACY] Extracted {len(objects)} objects from view '{view_name}' (response: {len(props_response.content)} bytes)")
+                        break  # Success, exit retry loop
+                        
+                    elif props_response.status_code == 202:
+                        # Properties still processing
+                        if attempt < max_retries - 1:
+                            logger.info(f"⟲ [LEGACY] Properties still processing for view '{view_name}', retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})...")
+                            time.sleep(retry_delay)
+                        else:
+                            logger.warning(f"⚠ [LEGACY] Properties for view '{view_name}' still not ready after {max_retries} attempts")
+                    elif props_response.status_code == 413:
+                        logger.error(f"✗ [LEGACY] Properties too large for view '{view_name}' (>800MB)")
+                        break
+                    else:
+                        logger.warning(f"✗ [LEGACY] Failed to get properties for view '{view_name}': {props_response.status_code} - {props_response.text[:200]}")
+                        break  # Non-retryable error
+            
+            logger.info(f"📊 [LEGACY] Total extraction: {len(all_objects)} objects from {len(view_info)} views")
+            logger.info(f"💾 [LEGACY] Stored {len(all_raw_responses)} raw API responses")
+            
+            # Step 3: Organize and structure the metadata (without hierarchy)
+            structured = self._structure_aps_metadata(all_objects, view_info)
+            
+            # Add raw responses to legacy method as well
+            if all_raw_responses:
+                structured["aps_raw_responses"] = {
+                    "available": True,
+                    "response_count": len(all_raw_responses),
+                    "responses": all_raw_responses,
+                    "note": "Complete unfiltered API responses from APS (legacy method)"
+                }
+            
+            return structured
+            
+        except Exception as e:
+            logger.error(f"Error extracting APS metadata (legacy): {e}")
             return None
     
     def _structure_aps_metadata(self, objects: list, views: list) -> Dict[str, Any]:

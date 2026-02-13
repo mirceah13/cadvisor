@@ -4,7 +4,7 @@ Handles upload, download, and file operations
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -305,6 +305,59 @@ def get_download_url(
     return DownloadUrlResponse(
         download_url=download_url,
         expires_in=900
+    )
+
+
+@router.get("/{file_id}/aps-raw-download")
+def download_aps_raw_data(
+    file_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Download complete unfiltered APS API responses as JSON file
+    
+    - Returns raw APS metadata without truncation
+    - Enforces organization-level access control
+    - Downloads as file to avoid browser performance issues
+    """
+    if not current_user.org_memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to an organization"
+        )
+    
+    org_membership = current_user.org_memberships[0]
+    org_id = org_membership.org_id
+    
+    # Get file service and fetch file
+    file_service = FileService(db)
+    file_record = file_service.get_file(file_id=file_id, org_id=org_id)
+    
+    if not file_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found or access denied"
+        )
+    
+    # Extract APS raw responses from metadata
+    metadata = file_record.parsed_metadata or {}
+    aps_raw_responses = metadata.get("aps_raw_responses")
+    
+    if not aps_raw_responses or not aps_raw_responses.get("available"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="APS raw responses not available for this file"
+        )
+    
+    # Return as downloadable JSON file
+    filename = f"{file_record.filename}_aps_raw.json"
+    return JSONResponse(
+        content=aps_raw_responses,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/json"
+        }
     )
 
 

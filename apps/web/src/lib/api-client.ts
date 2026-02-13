@@ -102,6 +102,24 @@ class ApiClient {
     })
     return response.data
   }
+
+  // Download file as blob (for authenticated file downloads)
+  async downloadFile(url: string, filename: string) {
+    const response = await this.client.get(url, {
+      responseType: 'blob',
+    })
+    
+    // Create blob and trigger download
+    const blob = new Blob([response.data])
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(downloadUrl)
+  }
 }
 
 // Export singleton instance
@@ -116,6 +134,7 @@ export const api = {
   delete: <T>(url: string, config = {}) => apiClient.delete<T>(url, config),
   upload: <T>(url: string, formData: FormData, onProgress?: (progress: number) => void) =>
     apiClient.upload<T>(url, formData, onProgress),
+  downloadFile: (url: string, filename: string) => apiClient.downloadFile(url, filename),
 }
 
 // Dashboard API

@@ -136,12 +136,37 @@ class SubmissionProfileGenerator:
         
         # Extract from DXF/DWG files
         for file in dxf_files:
-            if file.parsed_metadata and "parsed_data" in file.parsed_metadata:
-                parsed = file.parsed_metadata["parsed_data"]
+            meta = file.parsed_metadata or {}
+            # New flat APS format (no "parsed_data" wrapper)
+            if meta.get("aps_extraction") or meta.get("extraction_method"):
+                if "layers" in meta:
+                    building_info["layers_count"] = meta["layers"].get("count", 0)
+                if "entities" in meta:
+                    building_info["entities"] = meta["entities"]
+                # Structural element counts from new format
+                struct = meta.get("structural_elements", {})
+                if struct.get("beams"):
+                    building_info["beams"] = struct["beams"]
+                if struct.get("slabs"):
+                    building_info["slabs"] = struct["slabs"]
+                # Room count
+                rooms = meta.get("rooms", {})
+                if rooms.get("count"):
+                    building_info["room_count"] = rooms["count"]
+                # Fire info
+                fire_el = meta.get("fire_elements", {})
+                if fire_el.get("count"):
+                    building_info["fire_resistance_specs"] = fire_el["count"]
+                evac = meta.get("evacuation", [])
+                if evac:
+                    building_info["evacuation_distances"] = [
+                        f"{e['value']} {e['unit']}" for e in evac
+                    ]
+            # Old nested format
+            elif "parsed_data" in meta:
+                parsed = meta["parsed_data"]
                 if parsed.get("type") in ["dxf", "dwg"] and "data" in parsed:
                     dxf_data = parsed["data"]
-                    
-                    # Store DXF-specific info
                     if "layers" in dxf_data:
                         building_info["layers_count"] = dxf_data["layers"].get("count", 0)
                     if "entities" in dxf_data:

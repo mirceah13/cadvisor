@@ -130,17 +130,42 @@ class FireSafetyLegendDetector:
                         "source": f"legend_page_{legend.get('page', 'unknown')}"
                     })
         else:
-            # DXF/DWG format - use text_annotations
-            logger.info("Detected DXF/DWG format - searching text_annotations")
+            # DXF/DWG format - search all available text sources
+            logger.info("Detected DXF/DWG format - searching text_annotations and pre-extracted data")
             text_annotations = cad_metadata.get("text_annotations", {})
-            sample_texts = text_annotations.get("sample_texts", [])
-            
-            for idx, text_item in enumerate(sample_texts):
+
+            # OLD format: text_annotations.sample_texts[].content
+            for idx, text_item in enumerate(text_annotations.get("sample_texts", [])):
                 texts_to_search.append({
                     "content": text_item.get("content", ""),
                     "layer": text_item.get("layer", "unknown"),
-                    "source": f"text_annotation_{idx}"
+                    "source": f"sample_text_{idx}"
                 })
+
+            # NEW format: text_annotations.items[].text  (from _extract_compliance_analysis)
+            for idx, text_item in enumerate(text_annotations.get("items", [])):
+                texts_to_search.append({
+                    "content": text_item.get("text", ""),
+                    "layer": text_item.get("layer", "unknown"),
+                    "source": f"text_item_{idx}"
+                })
+
+            # PRE-EXTRACTED: fire_elements already have decoded text with ratings
+            for idx, fe in enumerate(cad_metadata.get("fire_elements", {}).get("items", [])):
+                texts_to_search.append({
+                    "content": fe.get("text", ""),
+                    "layer": fe.get("layer", "unknown"),
+                    "source": f"fire_element_{idx}"
+                })
+
+            # FAST PATH: if we already have structured fire_elements, mark legend found immediately
+            pre_fire = cad_metadata.get("fire_elements", {})
+            if pre_fire.get("count", 0) > 0 or pre_fire.get("items"):
+                legend_info["found"] = True
+                legend_info["location"] = {"source": "pre_extracted_fire_elements", "layer": "multiple"}
+                for fe in pre_fire.get("items", []):
+                    legend_info["text_content"].append(fe.get("text", ""))
+                logger.info(f"Fast-path: legend confirmed from {pre_fire.get('count',0)} pre-extracted fire elements")
         
         # Search for legend in all collected texts
         for text_item in texts_to_search:
@@ -174,6 +199,24 @@ class FireSafetyLegendDetector:
         
         return legend_info if legend_info["found"] or legend_info["elements"] else None
     
+    def _build_elements_from_pre_extracted(self, fire_elements_items: List[Dict]) -> List[Dict[str, Any]]:
+        """Convert pre-extracted fire_elements entries into the standard elements list format."""
+        elements = []
+        seen: set = set()
+        for fe in fire_elements_items:
+            for rating in fe.get("all_ratings", []) or ([fe["rating"]] if fe.get("rating") else []):
+                if rating and rating not in seen:
+                    seen.add(rating)
+                    class_info = self.RESISTANCE_CLASSES.get(rating, {})
+                    elements.append({
+                        "class": rating,
+                        "minutes": class_info.get("minutes", 0),
+                        "type": class_info.get("type", "fire resistance"),
+                        "found_in": fe.get("text", "")[:100],
+                        "source": fe.get("layer", "pre_extracted")
+                    })
+        return elements
+
     def _parse_resistance_elements_from_texts(self, text_items: List[Dict]) -> List[Dict[str, Any]]:
         """Parse fire resistance elements from texts (unified for PDF and DXF)"""
         elements = []
@@ -435,32 +478,67 @@ class FireSafetyAnalyzer:
     def _analyze_legends(self, cad_files_metadata: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Analyze fire resistance legends in all CAD files"""
         legend_findings = []
-        
+
         for file_meta in cad_files_metadata:
             file_name = file_meta.get("file_name", "unknown")
             cad_data = file_meta.get("data", {})
-            
+
             legend_info = self.legend_detector.detect_legend(cad_data)
-            
+
+            # ── Enrich from pre-extracted structured data ──────────────────
+            pre_fire    = cad_data.get("fire_elements", {})
+            pre_items   = pre_fire.get("items", []) or []
+            pre_rooms   = cad_data.get("rooms", {}).get("rooms", []) or []
+            pre_evac    = cad_data.get("evacuation", []) or []
+
+            if pre_items and (not legend_info or not legend_info.get("elements")):
+                # Build elements from pre-extracted fire_elements
+                pre_elements = self.legend_detector._build_elements_from_pre_extracted(pre_items)
+            else:
+                pre_elements = []
+
             if legend_info:
+                # Merge pre-extracted elements in case legend text parser missed some
+                existing_classes = {e["class"] for e in legend_info.get("elements", [])}
+                for el in pre_elements:
+                    if el["class"] not in existing_classes:
+                        legend_info.setdefault("elements", []).append(el)
+
                 legend_findings.append({
                     "file_name": file_name,
                     "legend_found": legend_info["found"],
                     "location": legend_info.get("location"),
                     "elements": legend_info.get("elements", []),
                     "color_codes": legend_info.get("color_codes", {}),
-                    "text_content": legend_info.get("text_content", [])
+                    "text_content": legend_info.get("text_content", []),
+                    "rooms": pre_rooms,
+                    "evacuation": pre_evac,
+                    "pre_extracted_fire_elements": pre_items,
                 })
-                
-                logger.info(f"Legend analysis for {file_name}: Found {len(legend_info.get('elements', []))} elements")
+                logger.info(f"Legend analysis for {file_name}: found={legend_info['found']}, elements={len(legend_info.get('elements',[]))}")
+            elif pre_items:
+                # No raw-text legend detected, but we have pre-extracted fire ratings → still valid
+                logger.info(f"No raw legend found for {file_name} but {len(pre_items)} pre-extracted fire elements exist — using those")
+                legend_findings.append({
+                    "file_name": file_name,
+                    "legend_found": True,
+                    "location": {"source": "pre_extracted_fire_elements"},
+                    "elements": pre_elements,
+                    "color_codes": {},
+                    "text_content": [fe.get("text", "") for fe in pre_items],
+                    "rooms": pre_rooms,
+                    "evacuation": pre_evac,
+                    "pre_extracted_fire_elements": pre_items,
+                })
             else:
-                # Create finding for missing legend
                 legend_findings.append({
                     "file_name": file_name,
                     "legend_found": False,
-                    "issue": "Fire resistance legend not found or incomplete"
+                    "issue": "Fire resistance legend not found or incomplete",
+                    "rooms": pre_rooms,
+                    "evacuation": pre_evac,
                 })
-        
+
         return legend_findings
     
     def _check_fire_compartments(
@@ -478,9 +556,9 @@ class FireSafetyAnalyzer:
         
         # Check if compartmentation is required
         if floors > 2 or area > 1000:  # Typical thresholds
-            # Look for compartment indicators in CAD
+            # Look for compartment indicators in CAD (pre-extracted fire_elements count as compartmentation evidence)
             has_compartmentation = self._detect_compartmentation(cad_files)
-            
+
             if not has_compartmentation:
                 findings.append({
                     "severity": "critical",
@@ -508,30 +586,32 @@ class FireSafetyAnalyzer:
         # Check for stairways in multi-story buildings
         if floors > 1:
             stairs_found = False
+            stair_keywords = [
+                "scara", "scari", "scarа",  # Romanian
+                "stair", "stairs", "stairway", "staircase",  # English
+                "escalier", "escaliers",  # French
+                "scala", "scale",  # Italian
+                "evac",  # Evacuation abbreviation
+            ]
+
             for file_meta in cad_files:
-                # Look for stair indicators with multiple Romanian and English variations
-                text_annotations = file_meta.get("data", {}).get("text_annotations", {})
-                sample_texts = text_annotations.get("sample_texts", [])
-                
-                # Romanian and English stairway keywords (case-insensitive, flexible)
-                stair_keywords = [
-                    "scara", "scari", "scarа",  # Romanian (including cyrillic 'а')
-                    "stair", "stairs", "stairway", "staircase",  # English
-                    "trappa", "treppe",  # Swedish/German
-                    "escalier", "escaliers",  # French
-                    "scala", "scale",  # Italian
-                    "casa da escada",  # Portuguese
-                    "caja de escalera",  # Spanish
-                    "evac",  # Evacuation (common abbreviation)
-                ]
-                
-                for text in sample_texts:
-                    content = text.get("content", "").lower()
-                    # Flexible matching - any keyword appearing in content
-                    if any(keyword in content for keyword in stair_keywords):
+                cad_data = file_meta.get("data", {})
+                ta = cad_data.get("text_annotations", {})
+
+                # Search both old format (sample_texts/content) and new (items/text)
+                # plus rooms names and fire_element texts
+                all_texts = (
+                    [t.get("content", "") for t in ta.get("sample_texts", [])]
+                    + [t.get("text", "") for t in ta.get("items", [])]
+                    + [fe.get("text", "") for fe in cad_data.get("fire_elements", {}).get("items", [])]
+                    + [r.get("name", "") for r in cad_data.get("rooms", {}).get("rooms", [])]
+                )
+
+                for content in all_texts:
+                    if any(kw in content.lower() for kw in stair_keywords):
                         stairs_found = True
                         break
-                
+
                 if stairs_found:
                     break
             
@@ -559,8 +639,13 @@ class FireSafetyAnalyzer:
         
         # Check if legend was found
         legends_with_info = [l for l in legend_analysis if l.get("legend_found")]
-        
-        if not legends_with_info:
+
+        # Also collect all pre-extracted fire elements across all files
+        all_pre_fire: List[Dict] = []
+        for l in legend_analysis:
+            all_pre_fire.extend(l.get("pre_extracted_fire_elements") or [])
+
+        if not legends_with_info and not all_pre_fire:
             findings.append({
                 "severity": "critical",
                 "title": "Fire Resistance Legend Missing",
@@ -570,34 +655,73 @@ class FireSafetyAnalyzer:
                 "references": ["P118-2025 Fire Safety Requirements", "Drawing standards for fire safety"],
                 "confidence": 0.95
             })
+        elif not legends_with_info and all_pre_fire:
+            # Pre-extracted fire ratings found → legend content exists even if header text wasn't matched
+            ratings_found = list({fe.get("rating") for fe in all_pre_fire if fe.get("rating")})
+            findings.append({
+                "severity": "info",
+                "title": "Fire Resistance Ratings Detected",
+                "description": (
+                    f"Fire resistance ratings found in drawing annotations: {', '.join(sorted(ratings_found))}. "
+                    f"Verify that a clear fire resistance legend table is visible on the plan."
+                ),
+                "location": "Drawing annotations",
+                "recommendation": "Ensure the fire resistance legend is clearly labelled as 'Legenda rezistenta la foc' per Romanian drawing standards.",
+                "references": ["P118-2025 Fire Safety Requirements"],
+                "confidence": 0.75
+            })
         else:
-            # Check for completeness of legend
+            # Legend found — check completeness
             for legend in legends_with_info:
                 elements = legend.get("elements", [])
                 color_codes = legend.get("color_codes", {})
-                
-                if len(elements) < 3:
+
+                # Supplement with any pre-extracted items not yet in elements
+                existing_classes = {e["class"] for e in elements}
+                for fe in (legend.get("pre_extracted_fire_elements") or []):
+                    for rating in fe.get("all_ratings", []) or ([fe["rating"]] if fe.get("rating") else []):
+                        if rating and rating not in existing_classes:
+                            existing_classes.add(rating)
+                            ci = self.legend_detector.RESISTANCE_CLASSES.get(rating, {})
+                            elements.append({"class": rating, "minutes": ci.get("minutes", 0),
+                                             "type": ci.get("type", "fire resistance"),
+                                             "found_in": fe.get("text", "")[:80],
+                                             "source": "pre_extracted"})
+
+                # Report evacuation distances if found
+                for ev in (legend.get("evacuation") or []):
+                    findings.append({
+                        "severity": "info",
+                        "title": "Evacuation Distance Annotated",
+                        "description": f"Drawing contains evacuation distance annotation: {ev.get('value')} {ev.get('unit')}",
+                        "location": legend.get("file_name"),
+                        "recommendation": "Verify this evacuation route length meets P118-2025 maximum travel distance requirements for the occupancy type.",
+                        "references": ["P118-2025 Section 2.4"],
+                        "confidence": 0.90
+                    })
+
+                if len(elements) < 2:
                     findings.append({
                         "severity": "warning",
                         "title": "Incomplete Fire Resistance Legend",
-                        "description": f"Legend in {legend.get('file_name')} has only {len(elements)} resistance classes. Typical buildings require 3-5 different ratings.",
+                        "description": f"Legend in {legend.get('file_name')} has only {len(elements)} resistance class(es). Typical buildings require 3-5 different ratings.",
                         "location": legend.get("file_name"),
-                        "recommendation": "Ensure legend includes all fire resistance classes used in the building (REI 120, REI 90, REI 60, etc.).",
+                        "recommendation": "Ensure legend includes all fire resistance classes used in the building (REI 120, REI 90, REI 60, EI 60-C, etc.).",
                         "references": ["P118-2025 Section 2.3"],
                         "confidence": 0.75
                     })
-                
-                if not color_codes or len(color_codes) == 0:
+
+                if not color_codes:
                     findings.append({
-                        "severity": "warning",
-                        "title": "Missing Color Coding in Legend",
-                        "description": f"Fire resistance legend in {legend.get('file_name')} does not show color codes for different resistance classes.",
+                        "severity": "info",
+                        "title": "Color Coding Not Parsed",
+                        "description": f"Could not extract explicit color codes from fire resistance legend in {legend.get('file_name')}. Manual review recommended.",
                         "location": legend.get("file_name"),
-                        "recommendation": "Add color coding to legend to clearly distinguish between different fire resistance ratings on the plan.",
+                        "recommendation": "Verify that each fire resistance rating is represented by a distinct color on the plan per drawing standards.",
                         "references": ["Drawing standards"],
-                        "confidence": 0.80
+                        "confidence": 0.60
                     })
-        
+
         return findings
     
     def _check_structural_fire_rating(
@@ -674,27 +798,34 @@ class FireSafetyAnalyzer:
             "rei", "ei-", "r-", "fireproof",
         ]
         
+        compartment_text_kw = [
+            "compartiment", "compartimentare", "separare", "delimitare",
+            "perete foc", "zid foc", "compartment", "firewall"
+        ]
+
         for file_meta in cad_files:
-            # Check layers
-            layers = file_meta.get("data", {}).get("layers", {}).get("layers", [])
-            for layer in layers:
-                layer_name = layer.get("name", "").lower()
-                if any(keyword in layer_name for keyword in fire_keywords):
+            cad_data = file_meta.get("data", {})
+
+            # Check layers (unchanged)
+            for layer in cad_data.get("layers", {}).get("layers", []):
+                if any(kw in layer.get("name", "").lower() for kw in fire_keywords):
                     return True
-            
-            # Also check text annotations for compartment mentions
-            text_annotations = file_meta.get("data", {}).get("text_annotations", {})
-            sample_texts = text_annotations.get("sample_texts", [])
-            
-            compartment_keywords = [
-                "compartiment", "compartimentare", "separare", "delimitare"
-            ]
-            
-            for text in sample_texts:
-                content = text.get("content", "").lower()
-                if any(keyword in content for keyword in compartment_keywords):
+
+            # Check text (both old and new formats)
+            ta = cad_data.get("text_annotations", {})
+            all_texts = (
+                [t.get("content", "") for t in ta.get("sample_texts", [])]
+                + [t.get("text", "") for t in ta.get("items", [])]
+                + [fe.get("text", "") for fe in cad_data.get("fire_elements", {}).get("items", [])]
+            )
+            for content in all_texts:
+                if any(kw in content.lower() for kw in compartment_text_kw):
                     return True
-        
+
+            # Pre-extracted fire elements imply compartmentation knowledge
+            if cad_data.get("fire_elements", {}).get("count", 0) > 0:
+                return True
+
         return False
     
     def _get_required_fire_resistance(self, floors: int, building_type: str) -> int:

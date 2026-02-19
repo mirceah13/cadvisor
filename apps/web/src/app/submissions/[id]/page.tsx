@@ -11,6 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { FileDetailsTab } from '@/components/file-details-tab'
 import { AnalysisProgress } from '@/components/analysis-progress'
@@ -98,6 +108,7 @@ export default function SubmissionDetailPage() {
   const [isParsingFiles, setIsParsingFiles] = useState(false)
   const [fileParsingInterval, setFileParsingInterval] = useState<NodeJS.Timeout | null>(null)
   const [timerTick, setTimerTick] = useState(0)
+  const [fileToDelete, setFileToDelete] = useState<{ id: string; filename: string } | null>(null)
 
   useEffect(() => {
     fetchSubmission()
@@ -696,16 +707,18 @@ export default function SubmissionDetailPage() {
   }
 
   const handleDownloadFile = async (fileId: string, filename: string) => {
-    if (!accessToken) return
-    
     try {
-      const response: any = await apiClient.get(`/files/${fileId}/download`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
-      
-      // Open download URL in new tab
+      const response: any = await apiClient.get(`/files/${fileId}/download`)
       if (response.download_url) {
-        window.open(response.download_url, '_blank')
+        // Use an anchor click so the browser treats it as a user-initiated download
+        // (avoids popup-blockers that fire on async window.open calls)
+        const link = document.createElement('a')
+        link.href = response.download_url
+        link.setAttribute('download', filename)
+        link.style.display = 'none'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
       }
     } catch (err: any) {
       toast({
@@ -716,20 +729,29 @@ export default function SubmissionDetailPage() {
     }
   }
 
-  const handleDeleteFile = async (fileId: string, filename: string) => {
-    if (!accessToken || !confirm(`Delete "${filename}"? This action cannot be undone.`)) return
-    
+  const handleOpenFile = async (fileId: string) => {
     try {
-      await apiClient.delete(`/files/${fileId}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
+      const response: any = await apiClient.get(`/files/${fileId}/download`)
+      if (response.download_url) {
+        window.open(response.download_url, '_blank', 'noopener,noreferrer')
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Open File",
+        description: err.response?.data?.detail || "Failed to generate file link",
       })
-      
+    }
+  }
+
+  const handleDeleteFile = async (fileId: string, filename: string) => {
+    try {
+      await apiClient.delete(`/files/${fileId}`)
       toast({
         title: "File Deleted",
         description: `${filename} has been deleted.`,
       })
-      
-      // Refresh files list
+      setFileToDelete(null)
       await fetchFiles()
     } catch (err: any) {
       toast({
@@ -1253,8 +1275,8 @@ export default function SubmissionDetailPage() {
                             variant="ghost" 
                             size="icon"
                             className="hover:bg-primary/20 hover:text-primary"
-                            onClick={() => router.push(`/files/${file.id}`)}
-                            title="View file details"
+                            onClick={() => handleOpenFile(file.id)}
+                            title="Open file in new tab"
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>
@@ -1262,7 +1284,7 @@ export default function SubmissionDetailPage() {
                             variant="ghost" 
                             size="icon"
                             className="hover:bg-destructive/20 hover:text-destructive"
-                            onClick={() => handleDeleteFile(file.id, file.filename)}
+                            onClick={() => setFileToDelete({ id: file.id, filename: file.filename })}
                             title="Delete file"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1662,6 +1684,28 @@ export default function SubmissionDetailPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Delete File Confirmation Dialog */}
+      <AlertDialog open={!!fileToDelete} onOpenChange={(open) => !open && setFileToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete File</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{' '}
+              <strong>{fileToDelete?.filename}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => fileToDelete && handleDeleteFile(fileToDelete.id, fileToDelete.filename)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

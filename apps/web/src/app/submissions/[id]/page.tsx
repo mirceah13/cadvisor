@@ -109,6 +109,7 @@ export default function SubmissionDetailPage() {
   const [fileParsingInterval, setFileParsingInterval] = useState<NodeJS.Timeout | null>(null)
   const [timerTick, setTimerTick] = useState(0)
   const [fileToDelete, setFileToDelete] = useState<{ id: string; filename: string } | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchSubmission()
@@ -751,6 +752,7 @@ export default function SubmissionDetailPage() {
         title: "File Deleted",
         description: `${filename} has been deleted.`,
       })
+      setDeleteDialogOpen(false)
       setFileToDelete(null)
       await fetchFiles()
     } catch (err: any) {
@@ -1284,7 +1286,10 @@ export default function SubmissionDetailPage() {
                             variant="ghost" 
                             size="icon"
                             className="hover:bg-destructive/20 hover:text-destructive"
-                            onClick={() => setFileToDelete({ id: file.id, filename: file.filename })}
+                            onClick={() => {
+                              setFileToDelete({ id: file.id, filename: file.filename })
+                              setDeleteDialogOpen(true)
+                            }}
                             title="Delete file"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1686,7 +1691,7 @@ export default function SubmissionDetailPage() {
       </div>
 
       {/* Delete File Confirmation Dialog */}
-      <AlertDialog open={!!fileToDelete} onOpenChange={(open) => !open && setFileToDelete(null)}>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete File</AlertDialogTitle>
@@ -1696,10 +1701,16 @@ export default function SubmissionDetailPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => { setDeleteDialogOpen(false); setFileToDelete(null) }}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => fileToDelete && handleDeleteFile(fileToDelete.id, fileToDelete.filename)}
+              onClick={() => {
+                if (fileToDelete) {
+                  handleDeleteFile(fileToDelete.id, fileToDelete.filename)
+                }
+              }}
             >
               Delete
             </AlertDialogAction>

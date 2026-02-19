@@ -19,9 +19,19 @@ class StorageService:
     
     def __init__(self):
         """Initialize MinIO client"""
-        # Single client using internal endpoint (works inside Docker)
+        # Internal client — used for actual data operations inside Docker network
         self.client = Minio(
             settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_USE_SSL
+        )
+        # External client — used ONLY for presigning URLs that the browser will call.
+        # The AWS/MinIO presigned-URL signature includes the Host header, so the URL
+        # must be signed with the same hostname the browser will send the request to.
+        # Replacing the host after signing (as was done before) breaks the HMAC.
+        self._presign_client = Minio(
+            settings.MINIO_EXTERNAL_ENDPOINT,
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_USE_SSL
@@ -64,15 +74,13 @@ class StorageService:
         storage_key = f"orgs/{org_id}/uploads/{filename}"
         
         try:
-            # Generate pre-signed PUT URL using internal endpoint
-            url = self.client.presigned_put_object(
+            # Sign with the external-endpoint client so the Host in the signature
+            # matches what the browser sends at request time.
+            url = self._presign_client.presigned_put_object(
                 self.bucket_name,
                 storage_key,
                 expires=timedelta(minutes=expires_minutes)
             )
-            
-            # Replace internal endpoint with external for browser access
-            url = url.replace(f"http://{settings.MINIO_ENDPOINT}", f"http://{settings.MINIO_EXTERNAL_ENDPOINT}")
             
             logger.info(f"Generated upload URL for: {storage_key}")
             return url, storage_key
@@ -97,15 +105,13 @@ class StorageService:
             Pre-signed download URL
         """
         try:
-            # Use internal endpoint for connection, then replace for browser access
-            url = self.client.presigned_get_object(
+            # Sign with the external-endpoint client so the Host in the signature
+            # matches what the browser sends at request time.
+            url = self._presign_client.presigned_get_object(
                 self.bucket_name,
                 storage_key,
                 expires=timedelta(minutes=expires_minutes)
             )
-            
-            # Replace internal endpoint with external for browser access
-            url = url.replace(f"http://{settings.MINIO_ENDPOINT}", f"http://{settings.MINIO_EXTERNAL_ENDPOINT}")
             
             logger.info(f"Generated download URL for: {storage_key}")
             return url

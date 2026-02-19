@@ -806,7 +806,7 @@ export default function SubmissionDetailPage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 space-y-8 p-8 pt-6 container max-w-7xl">
+      <div className="flex-1 space-y-6 p-6 pt-6 container max-w-7xl">
         {/* Hero Section */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-8 text-primary-foreground shadow-2xl">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]" />
@@ -907,105 +907,105 @@ export default function SubmissionDetailPage() {
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Files
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-blue-600">{submission.files_count}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                CAD files uploaded
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-purple-500 hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Analyses
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-purple-600">{analysisRuns.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {analysisRuns.filter(r => r.status === 'completed').length} completed
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
-                Findings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-orange-600">{findings.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {findings.filter(f => f.severity === 'critical').length} critical
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                {submission.status === 'completed' ? (
-                  <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                  <Clock className="h-4 w-4" />
-                )}
-                Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold capitalize text-green-600">
-                {submission.status}
+          <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-100 dark:border-blue-900">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full -mr-10 -mt-10" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Files</CardTitle>
+              <div className="p-2 rounded-lg bg-blue-500/15">
+                <FileText className="h-4 w-4 text-blue-600" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {submission.building_type || 'Type not specified'}
-              </p>
+            </CardHeader>
+            <CardContent className="relative">
+              <div className="text-3xl font-bold text-blue-700 dark:text-blue-400">{submission.files_count}</div>
+              <p className="text-xs text-muted-foreground mt-1">CAD files uploaded</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-100 dark:border-purple-900">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full -mr-10 -mt-10" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Analyses</CardTitle>
+              <div className="p-2 rounded-lg bg-purple-500/15">
+                <BarChart3 className="h-4 w-4 text-purple-600" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative">
+              <div className="text-3xl font-bold text-purple-700 dark:text-purple-400">{analysisRuns.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">{analysisRuns.filter(r => r.status === 'completed').length} completed</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-100 dark:border-amber-900">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full -mr-10 -mt-10" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Findings</CardTitle>
+              <div className="p-2 rounded-lg bg-amber-500/15">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative">
+              <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">{findings.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">{findings.filter(f => f.severity === 'critical').length} critical</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-100 dark:border-emerald-900">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full -mr-10 -mt-10" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Status</CardTitle>
+              <div className="p-2 rounded-lg bg-emerald-500/15">
+                {submission.status === 'completed' ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <Clock className="h-4 w-4 text-emerald-600" />
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="relative">
+              <div className="text-2xl font-bold capitalize text-emerald-700 dark:text-emerald-400">{submission.status}</div>
+              <p className="text-xs text-muted-foreground mt-1">{submission.building_type || 'Type not specified'}</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Tabs */}
         <Tabs defaultValue="files" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid bg-muted/50 p-1">
-            <TabsTrigger 
-              value="files" 
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Files ({files.length})
-            </TabsTrigger>
-            <TabsTrigger 
-              value="details" 
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              File Details
-            </TabsTrigger>
-            <TabsTrigger 
-              value="analysis" 
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Analysis
-            </TabsTrigger>
-            <TabsTrigger 
-              value="settings" 
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </TabsTrigger>
-          </TabsList>
+          <div className="border-b">
+            <TabsList className="h-auto w-full justify-start rounded-none bg-transparent p-0">
+              <TabsTrigger
+                value="files"
+                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                Files
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">{files.length}</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="details"
+                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+              >
+                <BarChart3 className="h-4 w-4" />
+                File Details
+              </TabsTrigger>
+              <TabsTrigger
+                value="analysis"
+                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+              >
+                <Play className="h-4 w-4" />
+                Analysis
+                {analysisRuns.length > 0 && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">{analysisRuns.length}</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="files" className="space-y-4">
             <Card className="border-2">

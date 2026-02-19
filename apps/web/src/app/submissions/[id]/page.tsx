@@ -709,18 +709,7 @@ export default function SubmissionDetailPage() {
 
   const handleDownloadFile = async (fileId: string, filename: string) => {
     try {
-      const response: any = await apiClient.get(`/files/${fileId}/download`)
-      if (response.download_url) {
-        // Use an anchor click so the browser treats it as a user-initiated download
-        // (avoids popup-blockers that fire on async window.open calls)
-        const link = document.createElement('a')
-        link.href = response.download_url
-        link.setAttribute('download', filename)
-        link.style.display = 'none'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
+      await apiClient.downloadFile(`/files/${fileId}/download`, filename)
     } catch (err: any) {
       toast({
         variant: "destructive",
@@ -732,15 +721,12 @@ export default function SubmissionDetailPage() {
 
   const handleOpenFile = async (fileId: string) => {
     try {
-      const response: any = await apiClient.get(`/files/${fileId}/download`)
-      if (response.download_url) {
-        window.open(response.download_url, '_blank', 'noopener,noreferrer')
-      }
+      await apiClient.openFileInNewTab(`/files/${fileId}/download`)
     } catch (err: any) {
       toast({
         variant: "destructive",
         title: "Cannot Open File",
-        description: err.response?.data?.detail || "Failed to generate file link",
+        description: err.response?.data?.detail || "Failed to open file",
       })
     }
   }

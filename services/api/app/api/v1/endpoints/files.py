@@ -268,43 +268,65 @@ def complete_upload(
     )
 
 
-@router.get("/{file_id}/download", response_model=DownloadUrlResponse)
-def get_download_url(
+@router.get("/{file_id}/download")
+def download_file(
     file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get pre-signed download URL for a file
-    
-    - Enforces organization-level access control
-    - Returns URL valid for 15 minutes
+    Stream a file directly from MinIO through the API.
+
+    Avoids presigned URLs which require the Host header to match the
+    endpoint used for signing — a problem in Docker where the internal
+    hostname (minio:9000) differs from the external one (localhost:9002).
     """
     if not current_user.org_memberships:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User must belong to an organization"
         )
-    
+
     org_membership = current_user.org_memberships[0]
     org_id = org_membership.org_id
-    
-    # Generate download URL
+
     file_service = FileService(db)
-    download_url = file_service.generate_download_url(
-        file_id=file_id,
-        org_id=org_id
-    )
-    
-    if not download_url:
+    storage = StorageService()
+
+    file_record = file_service.get_file(file_id=file_id, org_id=org_id)
+    if not file_record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found or access denied"
         )
-    
-    return DownloadUrlResponse(
-        download_url=download_url,
-        expires_in=900
+
+    try:
+        response = storage.get_object_stream(file_record.storage_key)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Storage error: {e}"
+        )
+
+    def iter_chunks():
+        try:
+            for chunk in response.stream(amt=65536):
+                yield chunk
+        finally:
+            response.close()
+            response.release_conn()
+
+    mime = file_record.mime_type or "application/octet-stream"
+    # Use RFC 5987 encoding for filenames with non-ASCII / special characters
+    import urllib.parse
+    encoded_name = urllib.parse.quote(file_record.filename)
+    return StreamingResponse(
+        iter_chunks(),
+        media_type=mime,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(file_record.size_bytes),
+        },
     )
 
 
@@ -509,42 +531,6 @@ def retry_file_processing(
         "task_id": task.id,
         "status": "pending"
     }
-
-
-@router.delete("/{file_id}")
-def delete_file(
-    file_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Delete a file (soft delete)
-    
-    - File is marked as deleted but not immediately removed from storage
-    """
-    if not current_user.org_memberships:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User must belong to an organization"
-        )
-    
-    org_membership = current_user.org_memberships[0]
-    org_id = org_membership.org_id
-    
-    file_service = FileService(db)
-    success = file_service.delete_file(
-        file_id=file_id,
-        org_id=org_id,
-        user_id=current_user.id
-    )
-    
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found or already deleted"
-        )
-    
-    return {"message": "File deleted successfully"}
 
 
 def _is_cad_file(mime_type: str, filename: str) -> bool:

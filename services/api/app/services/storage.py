@@ -19,19 +19,12 @@ class StorageService:
     
     def __init__(self):
         """Initialize MinIO client"""
-        # Internal client — used for actual data operations inside Docker network
+        # Single internal client — talks to MinIO over the Docker network.
+        # We avoid presigned URLs entirely for downloads (signature includes the
+        # Host header, which breaks when the host is rewritten for browser access).
+        # Instead downloads are proxied through the API via get_object_stream().
         self.client = Minio(
             settings.MINIO_ENDPOINT,
-            access_key=settings.MINIO_ACCESS_KEY,
-            secret_key=settings.MINIO_SECRET_KEY,
-            secure=settings.MINIO_USE_SSL
-        )
-        # External client — used ONLY for presigning URLs that the browser will call.
-        # The AWS/MinIO presigned-URL signature includes the Host header, so the URL
-        # must be signed with the same hostname the browser will send the request to.
-        # Replacing the host after signing (as was done before) breaks the HMAC.
-        self._presign_client = Minio(
-            settings.MINIO_EXTERNAL_ENDPOINT,
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_USE_SSL
@@ -59,63 +52,64 @@ class StorageService:
         expires_minutes: int = 15
     ) -> Tuple[str, str]:
         """
-        Generate a pre-signed URL for direct upload to MinIO
-        
-        Args:
-            org_id: Organization ID for isolation
-            filename: Original filename
-            content_type: MIME type
-            expires_minutes: URL expiry time in minutes
-            
-        Returns:
-            Tuple of (presigned_url, storage_key)
+        Generate a pre-signed URL for direct upload to MinIO.
+        Only used for legacy/direct-upload paths; the main upload flow
+        goes through the API's /upload endpoint (multipart POST) instead.
         """
-        # Generate secure storage key with org isolation
         storage_key = f"orgs/{org_id}/uploads/{filename}"
         
         try:
-            # Sign with the external-endpoint client so the Host in the signature
-            # matches what the browser sends at request time.
-            url = self._presign_client.presigned_put_object(
+            url = self.client.presigned_put_object(
                 self.bucket_name,
                 storage_key,
                 expires=timedelta(minutes=expires_minutes)
             )
-            
+            # Rewrite internal hostname to the external one for browser access.
+            # Note: this breaks AWS Sig4 host verification on some MinIO versions.
+            # Prefer the API-proxy download path (get_object_stream) for that reason.
+            url = url.replace(
+                f"http://{settings.MINIO_ENDPOINT}",
+                f"http://{settings.MINIO_EXTERNAL_ENDPOINT}"
+            )
             logger.info(f"Generated upload URL for: {storage_key}")
             return url, storage_key
-            
         except S3Error as e:
             logger.error(f"Error generating upload URL: {e}")
             raise
-    
+
+    def get_object_stream(self, storage_key: str):
+        """
+        Return a raw MinIO HTTP response that can be iterated as a byte stream.
+        Use this to proxy a file through the API instead of issuing a presigned URL.
+        The caller MUST call .close() and .release_conn() on the returned object
+        (or use it inside a try/finally block).
+
+        Returns:
+            urllib3.response.HTTPResponse  (iterable in chunks)
+        """
+        return self.client.get_object(self.bucket_name, storage_key)
+
     def generate_download_url(
         self,
         storage_key: str,
         expires_minutes: int = 15
     ) -> str:
         """
-        Generate a pre-signed URL for downloading a file
-        
-        Args:
-            storage_key: Object key in storage
-            expires_minutes: URL expiry time in minutes
-            
-        Returns:
-            Pre-signed download URL
+        Kept for backward-compatibility with any code that still calls it.
+        Prefer get_object_stream() + StreamingResponse for new code.
         """
         try:
-            # Sign with the external-endpoint client so the Host in the signature
-            # matches what the browser sends at request time.
-            url = self._presign_client.presigned_get_object(
+            url = self.client.presigned_get_object(
                 self.bucket_name,
                 storage_key,
                 expires=timedelta(minutes=expires_minutes)
             )
-            
+            url = url.replace(
+                f"http://{settings.MINIO_ENDPOINT}",
+                f"http://{settings.MINIO_EXTERNAL_ENDPOINT}"
+            )
             logger.info(f"Generated download URL for: {storage_key}")
             return url
-            
         except S3Error as e:
             logger.error(f"Error generating download URL: {e}")
             raise

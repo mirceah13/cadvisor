@@ -120,6 +120,21 @@ class ApiClient {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(downloadUrl)
   }
+
+  // Fetch as blob and open in a new tab (for preview / open-with)
+  async openFileInNewTab(url: string) {
+    const response = await this.client.get(url, {
+      responseType: 'blob',
+    })
+    const blob = new Blob([response.data], {
+      type: response.headers['content-type'] || 'application/octet-stream',
+    })
+    const objectUrl = window.URL.createObjectURL(blob)
+    const tab = window.open(objectUrl, '_blank')
+    // Revoke the object URL after a short delay so the tab has time to start loading
+    setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60_000)
+    return tab
+  }
 }
 
 // Export singleton instance
@@ -135,6 +150,7 @@ export const api = {
   upload: <T>(url: string, formData: FormData, onProgress?: (progress: number) => void) =>
     apiClient.upload<T>(url, formData, onProgress),
   downloadFile: (url: string, filename: string) => apiClient.downloadFile(url, filename),
+  openFileInNewTab: (url: string) => apiClient.openFileInNewTab(url),
 }
 
 // Dashboard API

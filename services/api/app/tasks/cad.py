@@ -14,6 +14,7 @@ from app.models import File, Submission
 from app.services.storage import StorageService
 from app.services.cad_parser import CADParserService
 from app.services.submission_profile import SubmissionProfileGenerator
+from sqlalchemy.orm import attributes
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,10 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
             raise ValueError(f"File {file_id} not found")
         
         # Update status
-        file.parsed_metadata = file.parsed_metadata or {}
+        file.parsed_metadata = dict(file.parsed_metadata or {})
         file.parsed_metadata["processing_status"] = "processing"
         file.parsed_metadata["processing_started_at"] = str(file.created_at)
+        attributes.flag_modified(file, "parsed_metadata")
         db.commit()
         
         # Download file from storage
@@ -119,7 +121,6 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
             logger.info(f"Updating file metadata with {len(metadata_dict)} keys")
             
             # Mark as modified and commit
-            from sqlalchemy.orm import attributes
             attributes.flag_modified(file, "parsed_metadata")
             db.flush()
             db.commit()
@@ -152,9 +153,10 @@ def process_cad_file(self, file_id: str) -> Dict[str, Any]:
         try:
             file = db.query(File).filter(File.id == file_uuid).first()
             if file:
-                file.parsed_metadata = file.parsed_metadata or {}
+                file.parsed_metadata = dict(file.parsed_metadata or {})
                 file.parsed_metadata["processing_status"] = "failed"
                 file.parsed_metadata["processing_error"] = str(e)
+                attributes.flag_modified(file, "parsed_metadata")
                 db.commit()
         except Exception as db_error:
             logger.error(f"Failed to update error status: {db_error}")

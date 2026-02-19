@@ -91,7 +91,8 @@ async def create_submission(
     # Get files count
     from app.models import File
     files_count = db.query(func.count(File.id)).filter(
-        File.submission_id == submission.id
+        File.submission_id == submission.id,
+        File.is_deleted == False
     ).scalar() or 0
     
     # Get project name
@@ -155,7 +156,8 @@ async def list_submissions(
     
     for submission in submissions:
         files_count = db.query(func.count(File.id)).filter(
-            File.submission_id == submission.id
+            File.submission_id == submission.id,
+            File.is_deleted == False
         ).scalar() or 0
         
         project_name = None
@@ -242,7 +244,8 @@ async def get_submission(
     # Get files count
     from app.models import File, Finding, AnalysisRun, FindingSeverity
     files_count = db.query(func.count(File.id)).filter(
-        File.submission_id == submission.id
+        File.submission_id == submission.id,
+        File.is_deleted == False
     ).scalar() or 0
     
     # Get project name
@@ -340,7 +343,8 @@ async def update_submission(
     # Get files count and project name
     from app.models import File
     files_count = db.query(func.count(File.id)).filter(
-        File.submission_id == submission.id
+        File.submission_id == submission.id,
+        File.is_deleted == False
     ).scalar() or 0
     
     project_name = None

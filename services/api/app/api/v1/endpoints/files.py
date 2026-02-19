@@ -513,12 +513,14 @@ def retry_file_processing(
         )
     
     # Reset file metadata to pending status
-    file.file_metadata = file.file_metadata or {}
-    file.file_metadata["processing_status"] = "pending"
-    file.file_metadata["retry_requested_at"] = datetime.now(timezone.utc).isoformat()
-    file.file_metadata.pop("processing_started_at", None)
-    file.file_metadata.pop("processing_completed_at", None)
-    file.file_metadata.pop("error", None)
+    file.parsed_metadata = dict(file.parsed_metadata or {})
+    file.parsed_metadata["processing_status"] = "pending"
+    file.parsed_metadata["retry_requested_at"] = datetime.now(timezone.utc).isoformat()
+    file.parsed_metadata.pop("processing_started_at", None)
+    file.parsed_metadata.pop("processing_completed_at", None)
+    file.parsed_metadata.pop("error", None)
+    from sqlalchemy.orm import attributes as sa_attributes
+    sa_attributes.flag_modified(file, "parsed_metadata")
     
     db.commit()
     

@@ -4,6 +4,7 @@ Creates normalized JSON profile from parsed CAD and document files
 """
 
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -172,6 +173,41 @@ class SubmissionProfileGenerator:
                     if "entities" in dxf_data:
                         building_info["entities"] = dxf_data["entities"]
         
+        # ── Floor count inference for DWG-only submissions ─────────────────
+        # IFC storeys are authoritative; only infer if still 0 after IFC loop.
+        if building_info["floors"] == 0:
+            # 1. Parse floor keywords from filenames (Romanian + English)
+            #    Patterns: "ETAJ 1", "ETAJ1", "Floor 2", "Level 3", "Parter" (ground), "Subsol" (basement)
+            max_floor_num = 0
+            has_ground_floor = False
+            for file in dxf_files:
+                name = file.filename.lower()
+                # Named floor levels
+                m = re.search(r'(?:etaj|floor|nivel|level)[\s_-]*(\d+)', name)
+                if m:
+                    max_floor_num = max(max_floor_num, int(m.group(1)))
+                # Ground floor indicators
+                if re.search(r'(?:parter|ground[\s_-]*floor|rez[\s_-]*de[\s_-]*ch)', name):
+                    has_ground_floor = True
+                # Basement — not counted as above-ground floor
+            if max_floor_num > 0:
+                # e.g. "ETAJ 1" means at least 2 floors (ground + 1st)
+                building_info["floors"] = max_floor_num + 1
+            elif has_ground_floor:
+                building_info["floors"] = 1
+
+        # 2. Slab-count heuristic (very rough: ~10-20 slabs per floor in typical plans)
+        if building_info["floors"] == 0:
+            slabs = building_info.get("slabs", 0)
+            if slabs >= 30:
+                building_info["floors"] = max(2, min(slabs // 15, 8))
+            elif slabs > 0:
+                building_info["floors"] = 1
+
+        # 3. Absolute minimum: if rooms detected, assume at least 1 floor
+        if building_info["floors"] == 0 and building_info.get("room_count", 0) > 0:
+            building_info["floors"] = 1
+
         return building_info
     
     def _detect_systems(self, ifc_files: List[File]) -> Dict[str, bool]:

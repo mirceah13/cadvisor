@@ -308,12 +308,23 @@ class FireSafetyLegendDetector:
         color_codes = {}
         
         for layer in layers:
-            layer_name = layer.get("name", "").lower()
+            layer_name = layer.get("name", "").lower().strip()
             color = layer.get("color", None)
+            
+            # Skip default/unnamed layers and very short names that cause false positives
+            # (e.g. layer "0" would match "rei30", "ei60" etc. because "0" is a substring)
+            if not layer_name or len(layer_name) < 3:
+                continue
+            # Skip purely numeric layer names (e.g. AutoCAD default layer "0")
+            if layer_name.isdigit():
+                continue
             
             # Try to match layer name with resistance class
             for elem in elements:
                 class_name = elem["class"].replace(" ", "").lower()
+                # Require meaningful overlap: the layer name must contain the class token
+                # or the class token must contain the layer name (but only if layer has
+                # enough characters to be a real semantic match, not a digit substring)
                 if class_name in layer_name or layer_name in class_name:
                     color_codes[elem["class"]] = {
                         "layer": layer.get("name"),
@@ -554,8 +565,16 @@ class FireSafetyAnalyzer:
         area = building.get("area", 0)
         building_type = building.get("type", "unknown")
         
+        # Count fire elements across all CAD files
+        fire_elements_count = sum(
+            f.get("data", {}).get("fire_elements", {}).get("count", 0)
+            for f in cad_files
+        )
+        room_count = building.get("room_count", 0)
+
         # Check if compartmentation is required
-        if floors > 2 or area > 1000:  # Typical thresholds
+        # Trigger on: many floors, large area, OR presence of fire-rated elements (they imply compartmentation intent)
+        if floors > 2 or area > 1000 or fire_elements_count > 5:  # Typical thresholds
             # Look for compartment indicators in CAD (pre-extracted fire_elements count as compartmentation evidence)
             has_compartmentation = self._detect_compartmentation(cad_files)
 
@@ -582,9 +601,10 @@ class FireSafetyAnalyzer:
         
         building = profile.get("building", {})
         floors = building.get("floors", 0)
+        room_count = building.get("room_count", 0)
         
-        # Check for stairways in multi-story buildings
-        if floors > 1:
+        # Check for stairways in multi-story OR substantial single-floor buildings
+        if floors > 1 or room_count > 3:
             stairs_found = False
             stair_keywords = [
                 "scara", "scari", "scarа",  # Romanian
@@ -744,19 +764,66 @@ class FireSafetyAnalyzer:
         for legend in legend_analysis:
             if legend.get("legend_found"):
                 elements = legend.get("elements", [])
+                if not elements:
+                    continue
                 
-                # Check if any element meets the requirement
-                max_resistance = max([e.get("minutes", 0) for e in elements], default=0)
+                # Structural elements (REI / R) typically carry load, check against required_rei
+                structural_elements = [e for e in elements if e.get("class", "").startswith(("REI", "R "))]
+                all_minutes = [e.get("minutes", 0) for e in elements]
+                max_resistance = max(all_minutes, default=0)
                 
                 if max_resistance < required_rei:
                     findings.append({
                         "severity": "critical",
                         "title": "Insufficient Fire Resistance Rating",
-                        "description": f"Building with {floors} floors requires minimum REI {required_rei} but maximum found is {max_resistance} minutes.",
+                        "description": (
+                            f"Building with {floors} floor(s) requires minimum REI {required_rei} min. "
+                            f"but the highest rated element found is only {max_resistance} min."
+                        ),
                         "location": legend.get("file_name"),
-                        "recommendation": f"Structural elements must have at least REI {required_rei} fire resistance rating.",
+                        "recommendation": f"Structural elements must have at least REI {required_rei} fire resistance rating per P118-2025 Table 2.3.1.",
                         "references": ["P118-2025 Table 2.3.1 - Fire resistance requirements"],
                         "confidence": 0.88
+                    })
+                else:
+                    # Check for structural elements BELOW the minimum (mixed ratings)
+                    under_rated = [
+                        e["class"] for e in structural_elements
+                        if e.get("minutes", 0) < required_rei
+                    ]
+                    if under_rated:
+                        findings.append({
+                            "severity": "warning",
+                            "title": "Mixed Fire Resistance Ratings — Some Elements Under Minimum",
+                            "description": (
+                                f"Building with {floors} floor(s) requires minimum REI {required_rei} min. "
+                                f"but these structural ratings are below that threshold: {', '.join(sorted(set(under_rated)))}. "
+                                f"Verify that under-rated elements are non-structural or have compensating measures."
+                            ),
+                            "location": legend.get("file_name"),
+                            "recommendation": (
+                                f"Review elements annotated as {', '.join(sorted(set(under_rated)))} and confirm they either "
+                                f"do not carry structural load or are protected to achieve REI {required_rei}."
+                            ),
+                            "references": ["P118-2025 Table 2.3.1 - Fire resistance requirements"],
+                            "confidence": 0.80
+                        })
+                    
+                    # Positive confirmation
+                    all_classes = sorted({e["class"] for e in elements})
+                    findings.append({
+                        "severity": "info",
+                        "title": "Fire Resistance Ratings Summary",
+                        "description": (
+                            f"Drawing contains {len(elements)} fire-resistance rating class(es): "
+                            f"{', '.join(all_classes)}. "
+                            f"Maximum structural rating detected: {max_resistance} min. "
+                            f"Required minimum for {floors}-floor building: REI {required_rei} min."
+                        ),
+                        "location": legend.get("file_name"),
+                        "recommendation": "Cross-check annotated ratings against the fire resistance schedule in the structural drawings.",
+                        "references": ["P118-2025 Table 2.3.1"],
+                        "confidence": 0.85
                     })
         
         return findings
@@ -773,11 +840,20 @@ class FireSafetyAnalyzer:
         # For now, provide a general check
         
         building = profile.get("building", {})
-        if building.get("floors", 0) > 1:
+        floors = building.get("floors", 0)
+        # Also trigger when fire-rated elements exist — they imply rated separations are present/intended
+        has_fire_elements = any(
+            f.get("data", {}).get("fire_elements", {}).get("count", 0) > 0
+            for f in cad_files
+        )
+        if floors > 1 or has_fire_elements:
             findings.append({
                 "severity": "info",
                 "title": "Fire Separation Verification Required",
-                "description": "Multi-story building requires verification of fire separation between floors.",
+                "description": (
+                    f"Building with {floors} floor(s) and fire-rated elements requires verification "
+                    "of fire separation between zones."
+                ) if has_fire_elements else "Multi-story building requires verification of fire separation between floors.",
                 "location": "Floor plans",
                 "recommendation": "Verify that floor slabs and penetrations have proper fire rating according to P118-2025.",
                 "references": ["P118-2025 Section 2.3.6"],

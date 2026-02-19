@@ -21,7 +21,12 @@ import {
   ChevronRight,
   AlertCircle,
   Calculator,
-  CheckCircle2
+  CheckCircle2,
+  Flame,
+  ShieldCheck,
+  Navigation,
+  DoorOpen,
+  Sofa
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
@@ -391,6 +396,32 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                     </div>
                   )}
 
+                  {/* Rooms */}
+                  {metadata.rooms?.count > 0 && (
+                    <div className="p-4 border rounded-lg bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-950/30 dark:to-teal-900/30 border-teal-200 dark:border-teal-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sofa className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                      </div>
+                      <p className="text-2xl font-bold text-teal-900 dark:text-teal-100">
+                        {metadata.rooms.count}
+                      </p>
+                      <p className="text-xs text-teal-700 dark:text-teal-300 mt-1">Rooms Identified</p>
+                    </div>
+                  )}
+
+                  {/* Fire Elements */}
+                  {metadata.fire_elements?.count > 0 && (
+                    <div className="p-4 border rounded-lg bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/30 border-red-200 dark:border-red-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Flame className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      </div>
+                      <p className="text-2xl font-bold text-red-900 dark:text-red-100">
+                        {metadata.fire_elements.count}
+                      </p>
+                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">Fire Resistance Specs</p>
+                    </div>
+                  )}
+
                   {/* Layers/Storeys */}
                   {(metadata.layers?.count || metadata.storeys?.count) && (
                     <div className="p-4 border rounded-lg bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/30 dark:to-orange-900/30 border-orange-200 dark:border-orange-800">
@@ -625,7 +656,115 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               </CollapsibleSection>
             )}
 
-            {!metadata.building && !metadata.layers && (
+            {/* Rooms Section */}
+            {metadata.rooms?.rooms && metadata.rooms.rooms.length > 0 && (
+              <CollapsibleSection
+                title="Rooms & Spaces"
+                icon={<Sofa className="h-5 w-5" />}
+                badge={metadata.rooms.count}
+                defaultOpen={true}
+              >
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2 font-semibold">Room Name</th>
+                        <th className="text-left p-2 font-semibold">Floor Covering</th>
+                        <th className="text-left p-2 font-semibold">Height</th>
+                        <th className="text-left p-2 font-semibold">Layer</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metadata.rooms.rooms.map((room: any, idx: number) => (
+                        <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
+                          <td className="p-2 font-medium">{room.name}</td>
+                          <td className="p-2 text-muted-foreground">{room.floor_covering || '—'}</td>
+                          <td className="p-2">{room.height_m ? `${room.height_m} m` : '—'}</td>
+                          <td className="p-2"><code className="text-xs bg-muted px-1 rounded">{room.layer || '—'}</code></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Fire Safety Elements */}
+            {metadata.fire_elements?.items && metadata.fire_elements.items.length > 0 && (
+              <CollapsibleSection
+                title="Fire Safety Specifications"
+                icon={<Flame className="h-5 w-5 text-red-500" />}
+                badge={metadata.fire_elements.count}
+                defaultOpen={true}
+              >
+                <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
+                  <p className="text-xs text-red-900 dark:text-red-100">
+                    Fire resistance ratings extracted from drawing annotations (MTEXT objects).
+                    REI = Resistance / Insulation / Integrity (minutes). EI = Integrity / Insulation.
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2 font-semibold">Element Type</th>
+                        <th className="text-left p-2 font-semibold">Rating</th>
+                        <th className="text-left p-2 font-semibold">Source Text</th>
+                        <th className="text-left p-2 font-semibold">Layer</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metadata.fire_elements.items.map((el: any, idx: number) => (
+                        <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
+                          <td className="p-2">
+                            <Badge variant="outline" className="capitalize">
+                              {el.element_type?.replace(/_/g, ' ') || 'general'}
+                            </Badge>
+                          </td>
+                          <td className="p-2">
+                            {el.rating ? (
+                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100 font-mono">
+                                {el.rating}
+                              </Badge>
+                            ) : '—'}
+                          </td>
+                          <td className="p-2 text-xs text-muted-foreground max-w-xs truncate" title={el.text}>
+                            {el.text}
+                          </td>
+                          <td className="p-2"><code className="text-xs bg-muted px-1 rounded">{el.layer || '—'}</code></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Evacuation Data */}
+            {metadata.evacuation && metadata.evacuation.length > 0 && (
+              <CollapsibleSection
+                title="Evacuation Data"
+                icon={<Navigation className="h-5 w-5 text-orange-500" />}
+                badge={metadata.evacuation.length}
+                defaultOpen={true}
+              >
+                <div className="space-y-2">
+                  {metadata.evacuation.map((ev: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-3 border rounded-lg bg-orange-50 dark:bg-orange-950/30">
+                      <div>
+                        <p className="text-sm font-medium capitalize">{ev.type?.replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-muted-foreground">{ev.text}</p>
+                      </div>
+                      <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100 text-base px-3">
+                        {ev.value} {ev.unit}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {!metadata.building && !metadata.layers && !metadata.rooms?.count && !metadata.fire_elements?.count && (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
                   No building information available in this file
@@ -728,7 +867,76 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               </CollapsibleSection>
             )}
 
-            {!metadata.entities && !metadata.quantities && !metadata.storeys && (
+            {/* Structural Elements (from APS data) */}
+            {metadata.structural_elements && (
+              <CollapsibleSection
+                title="Structural Elements"
+                icon={<Building2 className="h-5 w-5" />}
+                defaultOpen={false}
+              >
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                  {metadata.structural_elements.beams > 0 && (
+                    <div className="p-4 border rounded-lg bg-card text-center">
+                      <p className="text-2xl font-bold">{metadata.structural_elements.beams}</p>
+                      <p className="text-xs text-muted-foreground">Beams</p>
+                    </div>
+                  )}
+                  {metadata.structural_elements.slabs > 0 && (
+                    <div className="p-4 border rounded-lg bg-card text-center">
+                      <p className="text-2xl font-bold">{metadata.structural_elements.slabs}</p>
+                      <p className="text-xs text-muted-foreground">Slabs</p>
+                    </div>
+                  )}
+                  {metadata.structural_elements.structural_layers?.length > 0 && (
+                    <div className="p-4 border rounded-lg bg-card text-center">
+                      <p className="text-2xl font-bold">{metadata.structural_elements.structural_layers.length}</p>
+                      <p className="text-xs text-muted-foreground">Structural Layers</p>
+                    </div>
+                  )}
+                </div>
+                {metadata.structural_elements.structural_layers?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">STRUCTURAL LAYERS</p>
+                    <div className="flex flex-wrap gap-1">
+                      {metadata.structural_elements.structural_layers.map((l: string, i: number) => (
+                        <code key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{l}</code>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CollapsibleSection>
+            )}
+
+            {/* Text Annotations */}
+            {metadata.text_annotations?.items && metadata.text_annotations.items.length > 0 && (
+              <CollapsibleSection
+                title="Text Annotations"
+                icon={<Type className="h-5 w-5" />}
+                badge={metadata.text_annotations.count}
+                defaultOpen={false}
+              >
+                <div className="mb-3 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    Decoded MTEXT and TEXT content from the drawing — includes notes, labels, and specifications.
+                  </p>
+                </div>
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {metadata.text_annotations.items.map((ann: any, idx: number) => (
+                    <div key={idx} className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm flex-1">{ann.text}</p>
+                        <code className="text-xs bg-muted px-1 rounded shrink-0">{ann.layer || '—'}</code>
+                      </div>
+                      {ann.text_height_mm && (
+                        <p className="text-xs text-muted-foreground mt-1">h={ann.text_height_mm}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {!metadata.entities && !metadata.quantities && !metadata.storeys && !metadata.structural_elements && (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
                   No geometry information available in this file

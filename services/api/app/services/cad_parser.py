@@ -1005,8 +1005,196 @@ class DXFParser:
             "metadata_note": "Extracted via Autodesk APS Model Derivative Metadata API with full CAD properties",
             "aps_extraction": True
         }
-        
+
+        # Extract compliance-relevant data from ALL objects (runs on full untruncated list)
+        compliance = self._extract_compliance_analysis(objects)
+        structured_metadata["rooms"] = {
+            "count": len(compliance["rooms"]),
+            "rooms": compliance["rooms"]
+        }
+        structured_metadata["fire_elements"] = {
+            "count": len(compliance["fire_elements"]),
+            "items": compliance["fire_elements"]
+        }
+        structured_metadata["evacuation"] = compliance["evacuation"]
+        structured_metadata["text_annotations"] = {
+            "count": len(compliance["text_annotations"]),
+            "items": compliance["text_annotations"]
+        }
+        structured_metadata["structural_elements"] = compliance["structural_elements"]
+
         return structured_metadata
+
+    def _decode_mtext(self, text: str) -> str:
+        """Strip AutoCAD MTEXT formatting codes to produce plain text."""
+        if not text:
+            return ""
+        # Remove formatting escapes: \A1; \pql; \fArial|b0|i0|c0|p34; \W0.9x; \pqc; \pqr; etc.
+        t = re.sub(r'\\[A-Za-z][^;\\{}\n]*;', '', text)
+        # \P = paragraph break
+        t = re.sub(r'\\P', ' ', t)
+        # Strip braces
+        t = re.sub(r'[{}]', '', t)
+        # Tab → space
+        t = t.replace('\t', ' ')
+        # Collapse whitespace
+        t = re.sub(r' {2,}', ' ', t).strip()
+        return t
+
+    def _extract_compliance_analysis(self, objects: list) -> Dict[str, Any]:
+        """
+        Scan all APS objects (untruncated) for compliance-relevant data.
+        Extracts rooms, fire ratings, evacuation distances, text annotations,
+        and structural element counts.
+
+        Returns dict with keys: rooms, fire_elements, evacuation,
+                                text_annotations, structural_elements
+        """
+        rei_pat  = re.compile(r'REI[\s\-]?(\d+)', re.IGNORECASE)
+        ei_pat   = re.compile(r'EI[\s\-]?(\d+)(?:[\-\u2013]([A-Z]+))?', re.IGNORECASE)
+        evac_pat = re.compile(r'lungime\s+de\s+evacuare\s*=\s*([\d.,]+)\s*(m|mm)?', re.IGNORECASE)
+        fire_kw  = [
+            'rezistent la foc', 'rezistenta la foc', 'incombustibil',
+            'desfumare', 'evacuare', ' rei ', ' ei ', 'rezistenta foc'
+        ]
+
+        rooms            = []
+        fire_elements    = []
+        evacuation_info  = []
+        text_annotations = []
+        beam_count       = 0
+        slab_count       = 0
+        structural_layers: set = set()
+
+        seen_fire_texts   = set()
+        seen_room_handles = set()
+
+        for obj in objects:
+            obj_name   = (obj.get('name') or '').strip()
+            props      = obj.get('properties') or {}
+            if not isinstance(props, dict):
+                continue
+
+            general   = props.get('General') or {}
+            layer_val = (general.get('Layer') or '').strip()
+            handle    = (general.get('Handle') or '').strip()
+            layer_l   = layer_val.lower()
+            name_l    = obj_name.lower()
+
+            # ── Rooms from Attributes property set ─────────────────────────
+            attrs     = props.get('Attributes') or {}
+            room_name = (attrs.get('ROOM_NAME') or '').strip()
+            if room_name and handle not in seen_room_handles:
+                seen_room_handles.add(handle)
+                height_raw = (attrs.get('sCustom1Value') or '').strip()
+                height_m: Optional[float] = None
+                hm = re.search(r'[Hh]\s*=\s*([\d.,]+)', height_raw)
+                if hm:
+                    try:
+                        height_m = float(hm.group(1).replace(',', '.'))
+                    except ValueError:
+                        pass
+                rooms.append({
+                    "name": room_name,
+                    "floor_code": (attrs.get('floorCode') or '').strip(),
+                    "floor_covering": (attrs.get('stFloorCovering') or '').strip(),
+                    "height_m": height_m,
+                    "area_marker": (attrs.get('measuredAreaCode') or '').strip(),
+                    "layer": layer_val,
+                })
+
+            # ── Structural element counting ────────────────────────────────
+            if 'beam' in name_l or 'grinda' in layer_l:
+                beam_count += 1
+            if 'placa' in name_l or 'slab' in name_l or 'plac' in layer_l:
+                slab_count += 1
+            if any(x in layer_l for x in ('str', 'structura', 'grinda', 'ifc model', 'plac')):
+                structural_layers.add(layer_val)
+
+            # ── Text / MTEXT content ───────────────────────────────────────
+            text_pset   = props.get('Text') or {}
+            raw_content = (text_pset.get('Contents') or '').strip()
+            if not raw_content:
+                continue
+
+            decoded   = self._decode_mtext(raw_content)
+            decoded_l = decoded.lower()
+            if len(decoded) < 3:
+                continue
+
+            text_annotations.append({
+                "text": decoded[:500],
+                "layer": layer_val,
+                "text_height_mm": (text_pset.get('Text height') or '').strip(),
+                "object_name": obj_name,
+            })
+
+            # ── Fire elements ──────────────────────────────────────────────
+            has_rei  = rei_pat.search(decoded)
+            has_ei   = ei_pat.search(decoded)
+            is_fire  = has_rei or has_ei or any(kw in decoded_l for kw in fire_kw)
+            has_evac = evac_pat.search(decoded)
+
+            if is_fire and not has_evac:
+                key = decoded[:120]
+                if key not in seen_fire_texts:
+                    seen_fire_texts.add(key)
+
+                    etype = 'general'
+                    if any(x in decoded_l for x in ('planseu', 'planşeu', 'plansee', 'placa')):
+                        etype = 'floor_slab'
+                    elif any(x in decoded_l for x in ('perete', 'zid')):
+                        etype = 'wall'
+                    elif 'scara' in decoded_l or 'scări' in decoded_l:
+                        etype = 'stair'
+                    elif any(x in decoded_l for x in ('usa ', 'uşa ', 'ușa ')):
+                        etype = 'door'
+                    elif 'incombustibil' in decoded_l:
+                        etype = 'insulation'
+                    elif 'desfumare' in decoded_l:
+                        etype = 'smoke_ventilation'
+
+                    ratings = (
+                        [f"REI {m.group(1)}" for m in rei_pat.finditer(decoded)] +
+                        [f"EI {m.group(1)}{('-' + m.group(2)) if m.group(2) else ''}"
+                         for m in ei_pat.finditer(decoded)]
+                    )
+                    fire_elements.append({
+                        "element_type": etype,
+                        "rating": ratings[0] if len(ratings) == 1 else (', '.join(ratings) if ratings else None),
+                        "all_ratings": ratings,
+                        "text": decoded[:300],
+                        "layer": layer_val,
+                        "source": "mtext",
+                    })
+
+            # ── Evacuation distances ───────────────────────────────────────
+            if has_evac:
+                for m in evac_pat.finditer(decoded):
+                    try:
+                        val = float(m.group(1).replace(',', '.'))
+                    except ValueError:
+                        continue
+                    unit = (m.group(2) or 'm').lower()
+                    evacuation_info.append({
+                        "type": "travel_distance",
+                        "value": val,
+                        "unit": unit,
+                        "text": decoded[:200],
+                        "layer": layer_val,
+                    })
+
+        return {
+            "rooms": rooms,
+            "fire_elements": fire_elements,
+            "evacuation": evacuation_info,
+            "text_annotations": text_annotations[:300],   # cap at 300 items for DB size
+            "structural_elements": {
+                "beams": beam_count,
+                "slabs": slab_count,
+                "structural_layers": sorted(structural_layers),
+            },
+        }
 
     def _convert_dwg_with_libredwg(self, dwg_path: str) -> Optional[str]:
         """

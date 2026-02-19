@@ -971,10 +971,10 @@ export default function SubmissionDetailPage() {
         {/* Tabs */}
         <Tabs defaultValue="files" className="space-y-6">
           <div className="border-b">
-            <TabsList className="h-auto w-full justify-start rounded-none bg-transparent p-0">
+            <TabsList className="h-auto w-full rounded-none bg-transparent p-0">
               <TabsTrigger
                 value="files"
-                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+                className="flex flex-1 items-center justify-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
               >
                 <FileText className="h-4 w-4" />
                 Files
@@ -982,14 +982,14 @@ export default function SubmissionDetailPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="details"
-                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+                className="flex flex-1 items-center justify-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
               >
                 <BarChart3 className="h-4 w-4" />
                 File Details
               </TabsTrigger>
               <TabsTrigger
                 value="analysis"
-                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+                className="flex flex-1 items-center justify-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
               >
                 <Play className="h-4 w-4" />
                 Analysis
@@ -999,7 +999,7 @@ export default function SubmissionDetailPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="settings"
-                className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
+                className="flex flex-1 items-center justify-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
               >
                 <Settings className="h-4 w-4" />
                 Settings

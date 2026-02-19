@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/lib/api-client'
 import { 
   Search, 
@@ -300,79 +301,91 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* File Selector */}
-      {filesWithMetadata.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Select File to View</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {filesWithMetadata.map((file) => (
-                <Button
-                  key={file.id}
-                  variant={selectedFileId === file.id ? 'default' : 'outline'}
-                  className="justify-start"
-                  onClick={() => setSelectedFileId(file.id)}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  <span className="truncate">{file.filename}</span>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+    <div className="space-y-4">
+      {/* File toolbar */}
+      <Card>
+        <CardContent className="px-5 py-4">
+          <div className="flex items-center gap-6">
 
-      {/* Current File Info */}
-      {selectedFile && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  {selectedFile.filename}
-                </CardTitle>
-                <CardDescription>
-                  {selectedFile.size_bytes && !isNaN(selectedFile.size_bytes) 
-                    ? `${(selectedFile.size_bytes / 1024 / 1024).toFixed(2)} MB` 
-                    : selectedFile.size 
-                      ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
-                      : 'Size unknown'
-                  } • {selectedFile.mime_type || 'Unknown type'}
-                  {metadata.source_format && ` • Source: ${metadata.source_format.toUpperCase()}`}
-                </CardDescription>
-              </div>
-              {metadata.processing_status && (
-                <Badge variant={metadata.processing_status === 'completed' ? 'default' : 'secondary'}>
-                  {metadata.processing_status}
-                </Badge>
+            {/* Left: prominent file selector + metadata below */}
+            <div className="flex flex-col gap-1.5 min-w-0">
+              {filesWithMetadata.length > 1 ? (
+                <Select value={selectedFileId ?? undefined} onValueChange={setSelectedFileId}>
+                  <SelectTrigger className="h-10 w-[510px] bg-muted/60 font-medium text-sm border-border/80 hover:bg-muted transition-colors">
+                    <SelectValue placeholder="Choose a file…" />
+                  </SelectTrigger>
+                  <SelectContent className="w-[510px]">
+                    {filesWithMetadata.map((file) => (
+                      <SelectItem key={file.id} value={file.id}>
+                        <span className="flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          {file.filename}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : selectedFile ? (
+                <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-muted/60 border border-border/80 w-fit max-w-[510px]">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="text-sm font-medium truncate">{selectedFile.filename}</span>
+                </div>
+              ) : null}
+
+              {/* Contextual metadata — visually attached below the selector */}
+              {selectedFile && (
+                <div className="flex items-center gap-2 pl-1 mt-1 text-xs text-muted-foreground">
+                  <span>
+                    {selectedFile.size_bytes && !isNaN(selectedFile.size_bytes)
+                      ? `${(selectedFile.size_bytes / 1024 / 1024).toFixed(2)} MB`
+                      : selectedFile.size
+                        ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
+                        : 'Size unknown'}
+                  </span>
+                  {metadata.source_format && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span className="font-semibold text-foreground/70 uppercase tracking-wide">{metadata.source_format}</span>
+                    </>
+                  )}
+                  {metadata.processing_status && (
+                    <>
+                      <span className="text-border">·</span>
+                      <Badge
+                        variant={metadata.processing_status === 'completed' ? 'default' : 'secondary'}
+                        className="h-4 px-1.5 text-[10px]"
+                      >
+                        {metadata.processing_status}
+                      </Badge>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          </CardHeader>
-        </Card>
-      )}
 
-      {/* Search Bar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search fields, values, metadata..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+            {/* Push search to the right */}
+            <div className="flex-1" />
+
+            {/* Search */}
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <div className="relative w-60">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="Search metadata…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-10 text-sm"
+                />
+              </div>
+              {searchQuery && (
+                <p className="text-xs text-muted-foreground">
+                  {Object.keys(filteredData).length} field{Object.keys(filteredData).length !== 1 ? 's' : ''} match &ldquo;{searchQuery}&rdquo;
+                </p>
+              )}
+            </div>
+
           </div>
-          {searchQuery && (
-            <p className="text-sm text-muted-foreground mt-2">
-              Found {Object.keys(filteredData).length} matching field(s)
-            </p>
-          )}
         </CardContent>
       </Card>
 
@@ -405,44 +418,46 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
       ) : (
         /* Full Details View */
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 bg-muted/50 p-1">
-            <TabsTrigger 
+        <div className="border-b">
+          <TabsList className="h-auto w-full rounded-none bg-transparent p-0">
+            <TabsTrigger
               value="overview"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+              className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
             >
               Overview
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="building"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+              className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
             >
               Building
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="geometry"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+              className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
             >
               Geometry
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="parsing"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+              className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
             >
               Parsing Report
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="raw"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+              className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
             >
               Raw Data
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="aps-raw"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted data-[state=inactive]:hover:text-foreground transition-colors"
+              className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
             >
               APS Raw
             </TabsTrigger>
           </TabsList>
+        </div>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4">

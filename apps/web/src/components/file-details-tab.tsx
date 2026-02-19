@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -30,6 +30,110 @@ import {
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
+
+// ---------------------------------------------------------------------------
+// Lazy JSON viewer — defers stringify and renders lines incrementally via
+// IntersectionObserver so the browser never blocks on large payloads.
+// ---------------------------------------------------------------------------
+function LazyJsonViewer({ data }: { data: any }) {
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'done'>('idle')
+  const [lines, setLines] = useState<string[]>([])
+  const [visibleEnd, setVisibleEnd] = useState(300)
+  const [copied, setCopied] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  const handleLoad = useCallback(() => {
+    setLoadState('loading')
+    // setTimeout defers off the current paint cycle so the spinner actually
+    // renders before the (potentially multi-ms) JSON.stringify runs.
+    setTimeout(() => {
+      const json = JSON.stringify(data, null, 2)
+      setLines(json.split('\n'))
+      setLoadState('done')
+    }, 0)
+  }, [data])
+
+  // When the sentinel div scrolls into view, reveal 300 more lines.
+  useEffect(() => {
+    if (loadState !== 'done' || visibleEnd >= lines.length) return
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setVisibleEnd(v => Math.min(v + 300, lines.length))
+      },
+      { rootMargin: '200px', threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loadState, lines.length, visibleEnd])
+
+  const handleCopy = useCallback(async () => {
+    if (!lines.length) return
+    await navigator.clipboard.writeText(lines.join('\n'))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [lines])
+
+  if (loadState === 'idle') {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+        <FileText className="h-12 w-12 text-muted-foreground" />
+        <div className="space-y-1">
+          <p className="font-medium">Raw JSON metadata</p>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Not pre-loaded to avoid blocking the browser. Click below to parse
+            and display the data incrementally as you scroll.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleLoad}>
+          Load Raw Data
+        </Button>
+      </div>
+    )
+  }
+
+  if (loadState === 'loading') {
+    return (
+      <div className="flex items-center justify-center py-12 gap-3">
+        <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+        <span className="text-sm text-muted-foreground">Parsing JSON…</span>
+      </div>
+    )
+  }
+
+  const totalLines = lines.length
+  const shown = Math.min(visibleEnd, totalLines)
+  const remaining = totalLines - shown
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          Showing{' '}
+          <span className="font-medium text-foreground">{shown.toLocaleString()}</span>
+          {' '}/ {totalLines.toLocaleString()} lines
+        </span>
+        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleCopy}>
+          {copied ? 'Copied!' : 'Copy all'}
+        </Button>
+      </div>
+      <div className="overflow-auto max-h-[600px] rounded-lg border bg-muted">
+        <pre className="p-4 text-xs font-mono">
+          {lines.slice(0, shown).join('\n')}
+        </pre>
+        {remaining > 0 && (
+          <div
+            ref={sentinelRef}
+            className="px-4 py-3 text-xs text-muted-foreground text-center border-t"
+          >
+            ↓ {remaining.toLocaleString()} more lines — scroll to load
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 interface FileDetailsTabProps {
   profile: any
@@ -1156,9 +1260,7 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[600px] text-xs font-mono">
-                  {JSON.stringify(metadata, null, 2)}
-                </pre>
+                <LazyJsonViewer data={metadata} />
               </CardContent>
             </Card>
           </TabsContent>

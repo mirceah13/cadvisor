@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import User
+from app.models import User, File as FileModel
 from app.services.file import FileService
 from app.services.storage import StorageService
 from app.tasks.cad import process_cad_file
@@ -455,10 +455,10 @@ def delete_file(
     
     # Get file and verify access
     file_service = FileService(db)
-    file = db.query(File).filter(
-        File.id == file_id,
-        File.org_id == org_id,
-        File.is_deleted == False
+    file = db.query(FileModel).filter(
+        FileModel.id == file_id,
+        FileModel.org_id == org_id,
+        FileModel.is_deleted == False
     ).first()
     
     if not file:

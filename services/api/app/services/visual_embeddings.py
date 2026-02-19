@@ -5,9 +5,16 @@ Generates visual embeddings using CLIP for image similarity search
 
 import logging
 from typing import List, Optional
-import numpy as np
 from PIL import Image
 import io
+
+try:
+    import numpy as np
+    _NUMPY_AVAILABLE = True
+except Exception as _np_err:  # catches numpy.core.multiarray and similar
+    _NUMPY_AVAILABLE = False
+    import logging as _log
+    _log.getLogger(__name__).warning(f"numpy unavailable in visual_embeddings: {_np_err}")
 
 logger = logging.getLogger(__name__)
 
@@ -23,22 +30,26 @@ class VisualEmbeddingService:
         self._initialize_model()
     
     def _initialize_model(self):
-        """Initialize CLIP model"""
+        """Initialize CLIP model — failures are non-fatal"""
+        if not _NUMPY_AVAILABLE:
+            logger.warning("Skipping CLIP model init: numpy not available")
+            self.model = None
+            return
         try:
             from sentence_transformers import SentenceTransformer
             import torch
-            
+
             # Use CLIP model from sentence-transformers (easier integration)
             self.model = SentenceTransformer('clip-ViT-B-32')
-            
+
             # Set device
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
             self.model.to(self.device)
-            
+
             logger.info(f"CLIP model initialized on {self.device}")
-            
+
         except Exception as e:
-            logger.error(f"Failed to initialize CLIP model: {e}", exc_info=True)
+            logger.warning(f"CLIP model unavailable (visual embeddings disabled): {e}")
             self.model = None
     
     def generate_image_embedding(
@@ -146,28 +157,34 @@ class VisualEmbeddingService:
     ) -> float:
         """
         Compute cosine similarity between two embeddings
-        
+
         Args:
             embedding1: First embedding vector
             embedding2: Second embedding vector
-            
+
         Returns:
             Similarity score (0-1)
         """
+        if not _NUMPY_AVAILABLE:
+            logger.warning("compute_similarity unavailable: numpy not available")
+            return 0.0
         try:
             # Convert to numpy arrays
             vec1 = np.array(embedding1)
             vec2 = np.array(embedding2)
-            
+
             # Compute cosine similarity
             dot_product = np.dot(vec1, vec2)
             norm1 = np.linalg.norm(vec1)
             norm2 = np.linalg.norm(vec2)
-            
+
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+
             similarity = dot_product / (norm1 * norm2)
-            
+
             return float(similarity)
-            
+
         except Exception as e:
             logger.error(f"Error computing similarity: {e}")
             return 0.0

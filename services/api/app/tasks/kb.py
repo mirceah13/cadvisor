@@ -14,6 +14,7 @@ from app.models import KnowledgeSource, File
 from app.services.knowledge_base import KnowledgeBaseService
 from app.services.storage import StorageService
 from sqlalchemy.orm.attributes import flag_modified
+from datetime import datetime, timezone
 from app.tasks.cad import DatabaseTask
 
 logger = logging.getLogger(__name__)
@@ -98,9 +99,13 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         db.commit()
         db.refresh(source)
         
-        # Extract and process images from document
-        image_count = _process_document_images(source, file, db) if file else 0
-        
+        # Extract and process images from document (errors here do NOT fail the task)
+        try:
+            image_count = _process_document_images(source, file, db) if file else 0
+        except Exception as img_err:
+            logger.warning(f"Image processing failed (non-fatal) for {source_id}: {img_err}")
+            image_count = 0
+
         logger.info(f"Extracted {image_count} images from source {source_id}")
         
         # Determine chunking strategy
@@ -139,18 +144,19 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
     
     except Exception as e:
         logger.error(f"Error ingesting source {source_id}: {e}", exc_info=True)
-        
-        # Update error status
+
+        # Update error status — rollback broken transaction first
         try:
+            db.rollback()  # clear any failed transaction so new queries work
             source = db.query(KnowledgeSource).filter(
                 KnowledgeSource.id == source_uuid
             ).first()
-            
+
             if source:
                 source.status = "failed"
                 source.meta_data = source.meta_data or {}
                 source.meta_data["error"] = str(e)
-                source.meta_data["error_time"] = str(db.query(func.now()).scalar())
+                source.meta_data["error_time"] = datetime.now(timezone.utc).isoformat()
                 flag_modified(source, "meta_data")
                 db.commit()
                 db.refresh(source)

@@ -139,6 +139,7 @@ function LazyJsonViewer({ data }: { data: any }) {
 interface FileDetailsTabProps {
   profile: any
   files: any[]
+  initialFileId?: string | null
 }
 
 interface CollapsibleSectionProps {
@@ -252,9 +253,14 @@ function aciToName(aci: number | null | undefined): string {
   return names[aci] ?? `ACI ${aci}`
 }
 
-export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
+export function FileDetailsTab({ profile, files, initialFileId }: FileDetailsTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
+
+  // When parent navigates here with a specific file, select it
+  useEffect(() => {
+    if (initialFileId) setSelectedFileId(initialFileId)
+  }, [initialFileId])
 
   // Get files with metadata
   const filesWithMetadata = useMemo(() => {

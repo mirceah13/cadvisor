@@ -110,6 +110,8 @@ export default function SubmissionDetailPage() {
   const [timerTick, setTimerTick] = useState(0)
   const [fileToDelete, setFileToDelete] = useState<{ id: string; filename: string } | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('files')
+  const [detailsFileId, setDetailsFileId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchSubmission()
@@ -969,7 +971,7 @@ export default function SubmissionDetailPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="files" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="border-b">
             <TabsList className="h-auto w-full rounded-none bg-transparent p-0">
               <TabsTrigger
@@ -1228,7 +1230,10 @@ export default function SubmissionDetailPage() {
                         key={file.id}
                         className="group flex items-center justify-between p-4 rounded-lg border-2 border-transparent hover:border-primary/30 hover:bg-primary/5 transition-all duration-200"
                       >
-                        <div className="flex items-center gap-4 flex-1">
+                        <div
+                          className="flex items-center gap-4 flex-1 cursor-pointer"
+                          onClick={() => { setDetailsFileId(file.id); setActiveTab('details') }}
+                        >
                           <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
                             <FileText className="h-6 w-6 text-primary" />
                           </div>
@@ -1289,7 +1294,7 @@ export default function SubmissionDetailPage() {
             </Card>
           </TabsContent>
           <TabsContent value="details" className="space-y-4">
-            <FileDetailsTab profile={(submission as any)?.profile} files={files} />
+            <FileDetailsTab profile={(submission as any)?.profile} files={files} initialFileId={detailsFileId} />
           </TabsContent>
           <TabsContent value="analysis" className="space-y-6">
             {/* Analysis in Progress Banner */}

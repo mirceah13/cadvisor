@@ -1318,94 +1318,65 @@ export default function SubmissionDetailPage() {
               </Card>
             )}
 
-            {/* Analysis Stats */}
-            {analysisRuns.length > 0 && findings.length > 0 && !analyzing && (
-              <div className="grid gap-4 md:grid-cols-4">
-                <Card className="border-l-4 border-l-primary hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      Total Findings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-primary">{findings.length}</div>
-                    <p className="text-xs text-muted-foreground mt-1">Issues detected</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-red-500 hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      Critical
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-red-600">
-                      {findings.filter(f => f.severity === 'critical').length}
+            {/* Analysis Stats — compact inline bar */}
+            {analysisRuns.length > 0 && findings.length > 0 && !analyzing && (() => {
+              const critical = findings.filter(f => f.severity === 'critical').length
+              const warnings = findings.filter(f => f.severity === 'warning').length
+              const info = findings.filter(f => f.severity === 'info').length
+              return (
+                <div className="flex items-stretch divide-x divide-border rounded-xl border bg-muted/30 overflow-hidden">
+                  <div className="flex items-center gap-3 px-5 py-3 flex-1">
+                    <BarChart3 className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xl font-bold leading-none">{findings.length}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Total findings</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Requires immediate action</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      Warnings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-yellow-600">
-                      {findings.filter(f => f.severity === 'warning').length}
+                  </div>
+                  <div className="flex items-center gap-3 px-5 py-3 flex-1">
+                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                    <div>
+                      <p className={`text-xl font-bold leading-none ${critical > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>{critical}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Critical</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Needs attention</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Info
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-blue-600">
-                      {findings.filter(f => f.severity === 'info').length}
+                  </div>
+                  <div className="flex items-center gap-3 px-5 py-3 flex-1">
+                    <AlertCircle className="h-4 w-4 text-yellow-500 shrink-0" />
+                    <div>
+                      <p className={`text-xl font-bold leading-none ${warnings > 0 ? 'text-yellow-500' : 'text-muted-foreground'}`}>{warnings}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Warnings</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Informational</p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+                  </div>
+                  <div className="flex items-center gap-3 px-5 py-3 flex-1">
+                    <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0" />
+                    <div>
+                      <p className={`text-xl font-bold leading-none ${info > 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>{info}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Info</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Run Analysis Card */}
-            <Card className="border-2">
-              <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Play className="h-5 w-5 text-primary" />
-                      Compliance Analysis
-                    </CardTitle>
-                    <CardDescription className="mt-1">
-                      Run AI-powered compliance checks against building codes and regulations
-                    </CardDescription>
-                  </div>
-                  <Button
-                    onClick={handleStartAnalysis}
-                    disabled={files.length === 0 || !!runningAnalysisId}
-                    size="lg"
-                    className="shadow-lg"
-                  >
-                    <Play className="mr-2 h-5 w-5" />
-                    {runningAnalysisId ? 'Analyzing...' : 'Run Analysis'}
-                  </Button>
+            <div className="flex items-center justify-between px-5 py-4 rounded-xl border-2 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Play className="h-5 w-5 text-primary" />
                 </div>
-              </CardHeader>
-            </Card>
+                <div>
+                  <p className="font-semibold text-sm">Compliance Analysis</p>
+                  <p className="text-xs text-muted-foreground">AI-powered compliance checks against building codes and regulations</p>
+                </div>
+              </div>
+              <Button
+                onClick={handleStartAnalysis}
+                disabled={files.length === 0 || !!runningAnalysisId}
+                className="shadow-sm shrink-0"
+              >
+                <Play className="mr-2 h-4 w-4" />
+                {runningAnalysisId ? 'Analyzing…' : 'Run Analysis'}
+              </Button>
+            </div>
 
             {/* Progress Display */}
             {runningAnalysisId && (
@@ -1431,14 +1402,11 @@ export default function SubmissionDetailPage() {
             {/* Analysis Runs History */}
             {analysisRuns.length > 0 && (
               <Card className="border-2">
-                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-primary" />
-                    Analysis History
-                  </CardTitle>
-                  <CardDescription>
-                    Previous analysis runs and their results
-                  </CardDescription>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Analysis History</CardTitle>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="space-y-3">
@@ -1543,72 +1511,67 @@ export default function SubmissionDetailPage() {
             {/* Findings List */}
             {findings.length > 0 ? (
               <Card className="border-2">
-                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-primary" />
-                    Compliance Findings
-                  </CardTitle>
-                  <CardDescription>
-                    Issues, warnings, and recommendations from the analysis
-                  </CardDescription>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Compliance Findings</CardTitle>
+                  </div>
                 </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
+                <CardContent className="pt-0">
+                  <div className="space-y-2">
                     {findings.map((finding, index) => (
                       <div
                         key={finding.id}
-                        className={`p-5 rounded-xl border-2 transition-all duration-200 hover:shadow-md ${
-                          finding.severity === 'critical' ? 'border-red-200 bg-red-50/50 dark:bg-red-950/20' :
-                          finding.severity === 'warning' ? 'border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20' :
-                          'border-blue-200 bg-blue-50/50 dark:bg-blue-950/20'
+                        className={`rounded-lg border transition-all duration-200 hover:shadow-sm ${
+                          finding.severity === 'critical' ? 'border-red-800/40 bg-red-950/20' :
+                          finding.severity === 'warning' ? 'border-yellow-800/40 bg-yellow-950/20' :
+                          'border-blue-800/40 bg-blue-950/20'
                         }`}
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge
-                              className={`${
-                                finding.severity === 'critical' ? 'bg-red-600 hover:bg-red-700' :
-                                finding.severity === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' :
-                                'bg-blue-600 hover:bg-blue-700'
-                              } text-white`}
-                            >
-                              {finding.severity === 'critical' ? '🚨 Critical' :
-                               finding.severity === 'warning' ? '⚠️ Warning' :
-                               'ℹ️ Info'}
+                        {/* Header row */}
+                        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-inherit">
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            finding.severity === 'critical' ? 'bg-red-500' :
+                            finding.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                          }`} />
+                          <Badge
+                            className={`text-[10px] px-1.5 h-4 ${
+                              finding.severity === 'critical' ? 'bg-red-600 hover:bg-red-700' :
+                              finding.severity === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' :
+                              'bg-blue-600 hover:bg-blue-700'
+                            } text-white`}
+                          >
+                            {finding.severity}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] px-1.5 h-4">
+                            {finding.category}
+                          </Badge>
+                          {finding.location && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
+                              {finding.location}
                             </Badge>
-                            <Badge variant="outline" className="font-medium">
-                              {finding.category}
-                            </Badge>
-                            {finding.location && (
-                              <Badge variant="secondary" className="text-xs">
-                                📍 {finding.location}
-                              </Badge>
-                            )}
-                          </div>
-                          <Badge 
+                          )}
+                          <div className="flex-1" />
+                          <Badge
                             variant="outline"
-                            className={finding.status === 'resolved' ? 'border-green-500 text-green-700' : ''}
+                            className={`text-[10px] px-1.5 h-4 ${
+                              finding.status === 'resolved' ? 'border-green-600 text-green-500' : ''
+                            }`}
                           >
                             {finding.status}
                           </Badge>
                         </div>
-                        <h4 className="font-bold text-lg mb-2 text-foreground">
-                          {finding.title}
-                        </h4>
-                        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-                          {finding.description}
-                        </p>
-                        {finding.recommendation && (
-                          <div className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border border-primary/20">
-                            <div className="flex items-start gap-2">
-                              <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                              <div>
-                                <p className="text-sm font-semibold mb-1 text-primary">Recommendation:</p>
-                                <p className="text-sm text-foreground">{finding.recommendation}</p>
-                              </div>
+                        {/* Body */}
+                        <div className="px-4 py-3 space-y-2">
+                          <p className="font-semibold text-sm">{finding.title}</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{finding.description}</p>
+                          {finding.recommendation && (
+                            <div className="flex items-start gap-2 pt-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                              <p className="text-xs text-foreground/80">{finding.recommendation}</p>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -379,35 +379,7 @@ export function FileDetailsTab({ profile, files, initialFileId }: FileDetailsTab
                 </div>
               ) : null}
 
-              {/* Contextual metadata — visually attached below the selector */}
-              {selectedFile && (
-                <div className="flex items-center gap-2 pl-1 mt-1 text-xs text-muted-foreground">
-                  <span>
-                    {selectedFile.size_bytes && !isNaN(selectedFile.size_bytes)
-                      ? `${(selectedFile.size_bytes / 1024 / 1024).toFixed(2)} MB`
-                      : selectedFile.size
-                        ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
-                        : 'Size unknown'}
-                  </span>
-                  {metadata.source_format && (
-                    <>
-                      <span className="text-border">·</span>
-                      <span className="font-semibold text-foreground/70 uppercase tracking-wide">{metadata.source_format}</span>
-                    </>
-                  )}
-                  {metadata.processing_status && (
-                    <>
-                      <span className="text-border">·</span>
-                      <Badge
-                        variant={metadata.processing_status === 'completed' ? 'default' : 'secondary'}
-                        className="h-4 px-1.5 text-[10px]"
-                      >
-                        {metadata.processing_status}
-                      </Badge>
-                    </>
-                  )}
-                </div>
-              )}
+
             </div>
 
             {/* Push search to the right */}
@@ -990,7 +962,7 @@ export function FileDetailsTab({ profile, files, initialFileId }: FileDetailsTab
                 title="Entity Count"
                 icon={<Ruler className="h-5 w-5" />}
                 badge={metadata.entities.total}
-                defaultOpen={true}
+                defaultOpen={false}
               >
                 <div className="mb-3 p-3 bg-muted/50 rounded-lg">
                   <p className="text-xs text-muted-foreground">

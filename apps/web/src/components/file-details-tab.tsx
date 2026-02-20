@@ -214,34 +214,58 @@ function DataGrid({ data }: { data: Record<string, any> }) {
 }
 
 // ---------------------------------------------------------------------------
-// AutoCAD Color Index (ACI) → CSS hex  
-// Colors 1-9 are the standard fixed ACI values; 10-249 use an approximated
-// hue wheel, 250-255 are standard grayscale steps.
+// Color helpers — layer.color can be:
+//   • an RGB array  [r, g, b]   (ezdxf resolved true-color / RGB tuple)
+//   • an ACI integer 1-255      (AutoCAD Color Index)
+//   • a string e.g. "white"    (named color)
 // ---------------------------------------------------------------------------
-function aciToHex(aci: number | undefined | null): string {
+type LayerColor = number | number[] | string | undefined | null
+
+function colorToHex(c: LayerColor): string {
+  if (c == null) return '#888888'
+  // RGB array [r, g, b]
+  if (Array.isArray(c) && c.length === 3) {
+    const [r, g, b] = c
+    return `rgb(${r},${g},${b})`
+  }
+  // String color name
+  if (typeof c === 'string') {
+    const named: Record<string, string> = {
+      red: '#FF0000', yellow: '#FFFF00', green: '#00FF00', cyan: '#00FFFF',
+      blue: '#0000FF', magenta: '#FF00FF', white: '#FFFFFF', black: '#000000',
+      gray: '#808080', darkgray: '#414141', dark_gray: '#414141',
+    }
+    return named[c.toLowerCase()] ?? '#888888'
+  }
+  // ACI integer
   const fixed: Record<number, string> = {
     1: '#FF0000', 2: '#FFFF00', 3: '#00FF00', 4: '#00FFFF',
     5: '#0000FF', 6: '#FF00FF', 7: '#FFFFFF', 8: '#414141', 9: '#808080',
     250: '#0D0D0D', 251: '#333333', 252: '#555555', 253: '#777777',
     254: '#999999', 255: '#BBBBBB',
   }
-  if (aci == null) return '#888888'
-  if (fixed[aci]) return fixed[aci]
-  if (aci >= 10 && aci <= 249) {
-    const hue = Math.round(((aci - 10) / 240) * 360)
+  if (fixed[c as number]) return fixed[c as number]
+  if (c >= 10 && c <= 249) {
+    const hue = Math.round(((c - 10) / 240) * 360)
     return `hsl(${hue},80%,55%)`
   }
   return '#888888'
 }
 
-function aciToName(aci: number | undefined | null): string {
+function colorToName(c: LayerColor): string {
+  if (c == null) return 'Default'
+  if (Array.isArray(c) && c.length === 3) return `rgb(${c[0]},${c[1]},${c[2]})`
+  if (typeof c === 'string') return c
   const names: Record<number, string> = {
     1: 'Red', 2: 'Yellow', 3: 'Green', 4: 'Cyan',
     5: 'Blue', 6: 'Magenta', 7: 'White', 8: 'Dark Gray', 9: 'Gray',
   }
-  if (aci == null) return 'Default'
-  return names[aci] ?? `ACI ${aci}`
+  return names[c as number] ?? `ACI ${c}`
 }
+
+// Keep old names as aliases for backward compat within this file
+const aciToHex = colorToHex
+const aciToName = colorToName
 
 export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
@@ -302,9 +326,9 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
     }, {} as Record<string, string>)
   }, [flatData, searchQuery])
 
-  // Build a layer-name → ACI color map for use in fire safety & layers sections
+  // Build a layer-name → color map for use in fire safety & layers sections
   const layerColorMap = useMemo(() => {
-    const map: Record<string, number> = {}
+    const map: Record<string, LayerColor> = {}
     const layers = metadata?.layers?.layers
     if (Array.isArray(layers)) {
       layers.forEach((l: any) => { if (l?.name) map[l.name] = l.color })

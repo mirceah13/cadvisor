@@ -1,0 +1,16 @@
+# ============================================================
+# Railway — Celery Worker configuration
+# Same Dockerfile as the API; different start command.
+# In Railway dashboard: create service "cadvisor-worker",
+# point it at the same repo, set this as railway.toml.
+# ============================================================
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/docker/api.prod.Dockerfile"
+buildCommand = ""
+
+[deploy]
+# --concurrency 2 keeps RAM usage low on the free tier
+startCommand = "celery -A app.worker.celery_app worker --loglevel=info --concurrency=2"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

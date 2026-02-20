@@ -3,16 +3,26 @@ AI Service Configuration
 """
 from pydantic_settings import BaseSettings
 from pydantic import Field
+from typing import Optional
 
 
 class Settings(BaseSettings):
     """AI Service settings"""
-    
-    # Ollama
-    OLLAMA_BASE_URL: str = Field(..., env="OLLAMA_BASE_URL")
-    DEFAULT_LLM_MODEL: str = Field(default="mistral:7b-instruct", env="DEFAULT_LLM_MODEL")
+
+    # LLM backend — Groq (production) OR Ollama (local dev)
+    # Groq: https://console.groq.com → API Keys
+    GROQ_API_KEY: Optional[str] = Field(default=None, env="GROQ_API_KEY")
+
+    # Ollama (optional — local dev only; not used when GROQ_API_KEY is set)
+    OLLAMA_BASE_URL: Optional[str] = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
+
+    DEFAULT_LLM_MODEL: str = Field(default="llama-3.3-70b-versatile", env="DEFAULT_LLM_MODEL")
     DEFAULT_EMBEDDING_MODEL: str = Field(default="nomic-embed-text", env="DEFAULT_EMBEDDING_MODEL")
-    
+
+    @property
+    def use_groq(self) -> bool:
+        return bool(self.GROQ_API_KEY)
+
     # Database
     DATABASE_URL: str = Field(..., env="DATABASE_URL")
     

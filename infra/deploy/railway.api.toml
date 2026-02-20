@@ -1,0 +1,17 @@
+# ============================================================
+# Railway — API Service configuration
+# In Railway dashboard: set this file as the railway.toml for
+# the "cadvisor-api" service.
+# ============================================================
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/docker/api.prod.Dockerfile"
+# Build context is the repo root so COPY services/api/ works
+buildCommand = ""
+
+[deploy]
+startCommand = "sh -c 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2'"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

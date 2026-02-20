@@ -1,17 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { 
   FileText, 
   CheckCircle2, 
   AlertTriangle, 
   TrendingUp,
-  Clock,
-  Users,
   FolderOpen,
-  Database
 } from 'lucide-react'
 import { dashboardApi, DashboardStats } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
@@ -42,12 +40,12 @@ export function DashboardOverview() {
 
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {[...Array(8)].map((_, i) => (
-          <Card key={i}>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <Card key={i} className="overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-4 rounded-full" />
+              <Skeleton className="h-8 w-8 rounded-lg" />
             </CardHeader>
             <CardContent>
               <Skeleton className="h-8 w-16 mb-2" />
@@ -78,140 +76,102 @@ export function DashboardOverview() {
     )
   }
 
+const noCritical = stats.findings.critical === 0
+
   const statCards = [
     {
-      title: 'Total Projects',
+      title: 'Projects',
       value: stats.projects.total,
       description: `${stats.projects.active} active`,
+      badge: undefined as string | undefined,
+      trend: stats.projects.active > 0
+        ? `${Math.round((stats.projects.active / Math.max(stats.projects.total, 1)) * 100)}% active`
+        : 'No active projects',
       icon: FolderOpen,
-      trend: stats.projects.active > 0 ? `${Math.round((stats.projects.active / stats.projects.total) * 100)}% active` : 'No active projects',
-      link: '/projects'
+      gradient: 'from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20',
+      border: 'border-blue-200/60 dark:border-blue-900/40',
+      circle: 'bg-blue-500/10',
+      iconBg: 'bg-blue-500/15',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+      valueColor: 'text-blue-700 dark:text-blue-300',
+      link: '/projects',
     },
     {
       title: 'Submissions',
       value: stats.submissions.total,
       description: `${stats.submissions.analyzed} analyzed`,
-      icon: FileText,
+      badge: stats.submissions.pending > 0 ? `${stats.submissions.pending} pending` : undefined,
       trend: `${stats.usage.submissions_this_month} this month`,
+      icon: FileText,
+      gradient: 'from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20',
+      border: 'border-purple-200/60 dark:border-purple-900/40',
+      circle: 'bg-purple-500/10',
+      iconBg: 'bg-purple-500/15',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+      valueColor: 'text-purple-700 dark:text-purple-300',
       link: '/submissions',
-      badge: stats.submissions.pending > 0 ? `${stats.submissions.pending} pending` : undefined
     },
     {
       title: 'Total Findings',
       value: stats.findings.total,
       description: `${stats.findings.accepted} accepted`,
-      icon: CheckCircle2,
+      badge: undefined as string | undefined,
       trend: `${stats.findings.critical + stats.findings.high} need attention`,
-      link: '/submissions'
+      icon: CheckCircle2,
+      gradient: 'from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20',
+      border: 'border-amber-200/60 dark:border-amber-900/40',
+      circle: 'bg-amber-500/10',
+      iconBg: 'bg-amber-500/15',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      valueColor: 'text-amber-700 dark:text-amber-300',
+      link: '/submissions',
     },
     {
       title: 'Critical Issues',
       value: stats.findings.critical,
       description: `${stats.findings.high} high severity`,
+      badge: undefined as string | undefined,
+      trend: noCritical ? 'No critical issues' : 'Requires immediate action',
       icon: AlertTriangle,
-      trend: stats.findings.critical > 0 ? 'Requires immediate action' : 'No critical issues',
-      alert: stats.findings.critical > 0,
-      link: '/submissions'
+      gradient: noCritical
+        ? 'from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20'
+        : 'from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20',
+      border: noCritical
+        ? 'border-emerald-200/60 dark:border-emerald-900/40'
+        : 'border-red-200/60 dark:border-red-900/40',
+      circle: noCritical ? 'bg-emerald-500/10' : 'bg-red-500/10',
+      iconBg: noCritical ? 'bg-emerald-500/15' : 'bg-red-500/15',
+      iconColor: noCritical ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400',
+      valueColor: noCritical ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300',
+      link: '/submissions',
     },
-    {
-      title: 'Medium Severity',
-      value: stats.findings.medium,
-      description: 'Findings to review',
-      icon: AlertTriangle,
-      trend: `${stats.findings.low} low severity`,
-      link: '/submissions'
-    },
-    {
-      title: 'Analyses Today',
-      value: stats.usage.analyses_today,
-      description: 'AI compliance checks',
-      icon: TrendingUp,
-      trend: `${stats.submissions.analyzed} total completed`,
-      link: '/submissions'
-    },
-    {
-      title: 'This Month',
-      value: stats.usage.submissions_this_month,
-      description: 'Submissions uploaded',
-      icon: Clock,
-      trend: 'Monthly activity',
-      link: '/submissions'
-    },
-    {
-      title: 'Storage Used',
-      value: stats.usage.storage_mb < 1024 
-        ? `${stats.usage.storage_mb.toFixed(1)} MB`
-        : `${(stats.usage.storage_mb / 1024).toFixed(2)} GB`,
-      description: 'Files and reports',
-      icon: Database,
-      trend: stats.usage.storage_mb < 1024 
-        ? 'Under 1 GB'
-        : `${((stats.usage.storage_mb / 1024 / 50) * 100).toFixed(1)}% of 50 GB limit`,
-      link: '/billing'
-    }
   ]
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {statCards.map((card, index) => {
         const Icon = card.icon
-        const isAlert = card.alert
-        const isHighlight = index === 0 || index === 1 // Highlight first two cards
-        
         return (
-          <Card 
-            key={index} 
-            className={`relative overflow-hidden transition-all hover:shadow-lg cursor-pointer border-l-4 ${
-              isAlert 
-                ? 'border-l-red-500 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-50 dark:hover:bg-red-950/30' 
-                : isHighlight
-                ? 'border-l-primary bg-primary/5 hover:bg-primary/10'
-                : 'border-l-transparent hover:border-l-primary/50'
-            }`}
-            onClick={() => card.link && router.push(card.link)}
+          <Card
+            key={index}
+            className={`relative overflow-hidden bg-gradient-to-br ${card.gradient} border ${card.border} hover:shadow-lg transition-all cursor-pointer`}
+            onClick={() => router.push(card.link)}
           >
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {card.title}
-              </CardTitle>
-              <div className={`p-2 rounded-lg ${
-                isAlert 
-                  ? 'bg-red-100 dark:bg-red-900/30' 
-                  : isHighlight
-                  ? 'bg-primary/10'
-                  : 'bg-muted'
-              }`}>
-                <Icon className={`h-4 w-4 ${
-                  isAlert 
-                    ? 'text-red-600 dark:text-red-400' 
-                    : isHighlight
-                    ? 'text-primary'
-                    : 'text-muted-foreground'
-                }`} />
+            <div className={`absolute top-0 right-0 w-24 h-24 ${card.circle} rounded-full -mr-12 -mt-12 pointer-events-none`} />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
+              <div className={`p-2 rounded-lg ${card.iconBg} shrink-0`}>
+                <Icon className={`h-4 w-4 ${card.iconColor}`} />
               </div>
             </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${
-                isAlert 
-                  ? 'text-red-600 dark:text-red-400' 
-                  : isHighlight
-                  ? 'text-primary'
-                  : ''
-              }`}>
-                {card.value}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {card.description}
-              </p>
+            <CardContent className="relative">
+              <div className={`text-3xl font-bold ${card.valueColor}`}>{card.value}</div>
+              <p className="text-xs text-muted-foreground mt-1">{card.description}</p>
               {card.badge && (
-                <div className="mt-2">
-                  <span className="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800">
-                    {card.badge}
-                  </span>
-                </div>
+                <Badge className="mt-2 bg-primary/10 text-primary hover:bg-primary/20 text-xs border-0">{card.badge}</Badge>
               )}
-              <p className="text-xs text-muted-foreground mt-2 opacity-70 flex items-center gap-1">
-                <TrendingUp className="h-3 w-3" />
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                <TrendingUp className="h-3 w-3 shrink-0" />
                 {card.trend}
               </p>
             </CardContent>

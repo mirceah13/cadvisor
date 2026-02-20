@@ -31,12 +31,12 @@ export default function DashboardPage() {
       <DashboardNav />
       <div className="flex-1 space-y-8 p-8 pt-6 container max-w-7xl">
         {/* Hero Section */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-8 text-primary-foreground shadow-2xl">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-6 text-primary-foreground shadow-2xl">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]" />
           <div className="relative flex items-center justify-between">
-            <div className="space-y-2">
-              <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-              <p className="text-primary-foreground/90 text-lg max-w-2xl">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+              <p className="text-primary-foreground/80 text-sm">
                 AI-powered CAD compliance analysis for your architectural projects
               </p>
             </div>
@@ -59,13 +59,13 @@ export default function DashboardPage() {
 
         <DashboardOverview />
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7 items-start">
           <div className="col-span-4">
             <RecentActivity />
           </div>
           <div className="col-span-3 space-y-6">
-            {/* Finding Severity Chart */}
-            {stats && (
+            {/* Finding Severity Chart — only shown when there are actual findings */}
+            {stats && (stats.findings.critical + stats.findings.high + stats.findings.medium + stats.findings.low) > 0 && (
               <FindingSeverityChart
                 critical={stats.findings.critical}
                 high={stats.findings.high}

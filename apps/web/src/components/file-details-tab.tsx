@@ -214,58 +214,43 @@ function DataGrid({ data }: { data: Record<string, any> }) {
 }
 
 // ---------------------------------------------------------------------------
-// Color helpers — layer.color can be:
-//   • an RGB array  [r, g, b]   (ezdxf resolved true-color / RGB tuple)
-//   • an ACI integer 1-255      (AutoCAD Color Index)
-//   • a string e.g. "white"    (named color)
+// Color helpers
+//   layer.rgb  = [r,g,b] list (preferred — set by updated parser)
+//   layer.color = ACI integer (fallback)
 // ---------------------------------------------------------------------------
-type LayerColor = number | number[] | string | undefined | null
+function rgbToHex(rgb: number[] | null | undefined): string {
+  if (!rgb || rgb.length < 3) return '#888888'
+  const [r, g, b] = rgb
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
+}
 
-function colorToHex(c: LayerColor): string {
-  if (c == null) return '#888888'
-  // RGB array [r, g, b]
-  if (Array.isArray(c) && c.length === 3) {
-    const [r, g, b] = c
-    return `rgb(${r},${g},${b})`
-  }
-  // String color name
-  if (typeof c === 'string') {
-    const named: Record<string, string> = {
-      red: '#FF0000', yellow: '#FFFF00', green: '#00FF00', cyan: '#00FFFF',
-      blue: '#0000FF', magenta: '#FF00FF', white: '#FFFFFF', black: '#000000',
-      gray: '#808080', darkgray: '#414141', dark_gray: '#414141',
-    }
-    return named[c.toLowerCase()] ?? '#888888'
-  }
-  // ACI integer
+function aciToHex(aci: number | null | undefined): string {
   const fixed: Record<number, string> = {
-    1: '#FF0000', 2: '#FFFF00', 3: '#00FF00', 4: '#00FFFF',
-    5: '#0000FF', 6: '#FF00FF', 7: '#FFFFFF', 8: '#414141', 9: '#808080',
-    250: '#0D0D0D', 251: '#333333', 252: '#555555', 253: '#777777',
-    254: '#999999', 255: '#BBBBBB',
+    1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',
+    5:'#0000ff',6:'#ff00ff',7:'#ffffff',8:'#414141',9:'#808080',
   }
-  if (fixed[c as number]) return fixed[c as number]
-  if (c >= 10 && c <= 249) {
-    const hue = Math.round(((c - 10) / 240) * 360)
+  if (aci == null || aci === 256 || aci === 0) return '#888888'
+  if (fixed[aci]) return fixed[aci]
+  if (aci >= 10 && aci <= 249) {
+    const hue = Math.round(((aci - 10) / 240) * 360)
     return `hsl(${hue},80%,55%)`
   }
   return '#888888'
 }
 
-function colorToName(c: LayerColor): string {
-  if (c == null) return 'Default'
-  if (Array.isArray(c) && c.length === 3) return `rgb(${c[0]},${c[1]},${c[2]})`
-  if (typeof c === 'string') return c
-  const names: Record<number, string> = {
-    1: 'Red', 2: 'Yellow', 3: 'Green', 4: 'Cyan',
-    5: 'Blue', 6: 'Magenta', 7: 'White', 8: 'Dark Gray', 9: 'Gray',
-  }
-  return names[c as number] ?? `ACI ${c}`
+/** Resolve the best CSS color string from a layer object (prefers .rgb, falls back to .color ACI) */
+function layerColor(layer: any): string {
+  if (layer?.rgb && Array.isArray(layer.rgb) && layer.rgb.length === 3) return rgbToHex(layer.rgb)
+  return aciToHex(layer?.color)
 }
 
-// Keep old names as aliases for backward compat within this file
-const aciToHex = colorToHex
-const aciToName = colorToName
+function aciToName(aci: number | null | undefined): string {
+  const names: Record<number, string> = {
+    1:'Red',2:'Yellow',3:'Green',4:'Cyan',5:'Blue',6:'Magenta',7:'White',8:'Dark Gray',9:'Gray',
+  }
+  if (aci == null || aci === 256) return 'ByLayer'
+  return names[aci] ?? `ACI ${aci}`
+}
 
 export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
@@ -326,15 +311,7 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
     }, {} as Record<string, string>)
   }, [flatData, searchQuery])
 
-  // Build a layer-name → color map for use in fire safety & layers sections
-  const layerColorMap = useMemo(() => {
-    const map: Record<string, LayerColor> = {}
-    const layers = metadata?.layers?.layers
-    if (Array.isArray(layers)) {
-      layers.forEach((l: any) => { if (l?.name) map[l.name] = l.color })
-    }
-    return map
-  }, [metadata])
+
 
   if (files.length === 0) {
     return (
@@ -781,7 +758,7 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {metadata.layers.layers.slice(0, 18).map((layer: any, idx: number) => {
-                    const hex = aciToHex(layer.color)
+                    const hex = layerColor(layer)
                     const colorName = aciToName(layer.color)
                     const isDark = layer.color === 7 || layer.color == null
                     return (
@@ -823,8 +800,8 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {metadata.rooms.rooms.map((room: any, idx: number) => {
-                    const layerAci = layerColorMap[room.layer]
-                    const swatchHex = layerAci != null ? aciToHex(layerAci) : null
+                    const layerObj = metadata.layers?.layers?.find((l: any) => l.name === room.layer)
+                    const swatchHex = layerObj ? layerColor(layerObj) : null
                     return (
                       <div key={idx} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
                         {swatchHex && (
@@ -863,65 +840,94 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
             )}
 
             {/* Fire Safety Elements */}
-            {metadata.fire_elements?.items && metadata.fire_elements.items.length > 0 && (
-              <CollapsibleSection
-                title="Fire Safety Specifications"
-                icon={<Flame className="h-5 w-5 text-red-500" />}
-                badge={metadata.fire_elements.count}
-                defaultOpen={true}
-              >
-                <div className="space-y-2">
-                  {metadata.fire_elements.items.map((el: any, idx: number) => {
-                    const layerAci = layerColorMap[el.layer]
-                    const swatchHex = aciToHex(layerAci)
-                    const colorName = aciToName(layerAci)
-                    return (
-                      <div key={idx} className="flex items-stretch gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors group">
-                        {/* Color swatch from layer ACI */}
-                        <div className="flex flex-col items-center gap-1 shrink-0">
-                          <div
-                            className="w-8 h-8 rounded-md border border-white/10 shadow-inner"
-                            style={{ backgroundColor: swatchHex }}
-                            title={`Layer: ${el.layer || '—'} · ACI ${layerAci ?? '?'} (${colorName})`}
-                          />
-                          <span className="text-[9px] text-muted-foreground leading-none">{colorName}</span>
-                        </div>
-                        {/* Content */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                            <Badge variant="outline" className="capitalize text-xs">
-                              {el.element_type?.replace(/_/g, ' ') || 'general'}
-                            </Badge>
-                            {el.rating && (
-                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-100 font-mono text-xs">
-                                {el.rating}
-                              </Badge>
-                            )}
-                            {el.all_ratings && el.all_ratings.length > 1 && el.all_ratings.slice(1).map((r: string, ri: number) => (
-                              <Badge key={ri} variant="outline" className="font-mono text-xs text-red-600 dark:text-red-400 border-red-300 dark:border-red-700">
-                                {r}
-                              </Badge>
-                            ))}
+            {metadata.fire_elements?.items && metadata.fire_elements.items.length > 0 && (() => {
+              // Group items by simplified layer name (strip pen-number suffix for zone grouping)
+              const simplifyLayer = (layer: string) =>
+                (layer || '—').replace(/_Pen_No__\d+$/i, '').replace(/_pen_no_\d+$/i, '')
+              const items: any[] = [...metadata.fire_elements.items]
+              // Sort: by layer-group, then by element_type risk order
+              const typeOrder: Record<string, number> = {
+                wall: 1, floor_slab: 2, stair: 3, door: 4,
+                smoke_ventilation: 5, insulation: 6, general: 7,
+              }
+              items.sort((a, b) => {
+                const la = simplifyLayer(a.layer), lb = simplifyLayer(b.layer)
+                if (la !== lb) return la.localeCompare(lb)
+                return (typeOrder[a.element_type] ?? 8) - (typeOrder[b.element_type] ?? 8)
+              })
+              // Build ordered group list
+              const groups: { label: string; items: any[] }[] = []
+              for (const el of items) {
+                const label = simplifyLayer(el.layer)
+                const last = groups[groups.length - 1]
+                if (last?.label === label) last.items.push(el)
+                else groups.push({ label, items: [el] })
+              }
+              return (
+                <CollapsibleSection
+                  title="Fire Safety Specifications"
+                  icon={<Flame className="h-5 w-5 text-red-500" />}
+                  badge={metadata.fire_elements.count}
+                  defaultOpen={true}
+                >
+                  <div className="space-y-4">
+                    {groups.map((group) => {
+                      const groupLayerObj = metadata.layers?.layers?.find((l: any) =>
+                        simplifyLayer(l.name) === group.label || l.name === group.label
+                      )
+                      const groupHex = groupLayerObj ? layerColor(groupLayerObj) : '#888888'
+                      return (
+                        <div key={group.label}>
+                          {/* Group header */}
+                          <div className="flex items-center gap-2 mb-1.5 pb-1 border-b">
+                            <div
+                              className="w-2.5 h-2.5 rounded-sm shrink-0"
+                              style={{ backgroundColor: groupHex }}
+                            />
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2" title={el.text}>
-                            {el.text}
-                          </p>
-                          {el.layer && (
-                            <code className="text-[10px] bg-muted px-1 rounded mt-1 inline-block opacity-70">
-                              {el.layer}
-                            </code>
-                          )}
+                          {/* Compact row list */}
+                          <div className="divide-y divide-border/50">
+                            {group.items.map((el: any, idx: number) => {
+                              const layerObj = metadata.layers?.layers?.find((l: any) => l.name === el.layer)
+                              const hex = layerObj ? layerColor(layerObj) : groupHex
+                              return (
+                                <div key={idx} className="flex items-center gap-2 py-1.5 hover:bg-muted/30 px-1 rounded transition-colors">
+                                  {/* swatch */}
+                                  <div
+                                    className="w-3 h-3 rounded-sm shrink-0 border border-white/10"
+                                    style={{ backgroundColor: hex }}
+                                    title={el.layer}
+                                  />
+                                  {/* type */}
+                                  <Badge variant="outline" className="capitalize text-[10px] px-1.5 h-4 shrink-0">
+                                    {el.element_type?.replace(/_/g, ' ') || 'general'}
+                                  </Badge>
+                                  {/* ratings */}
+                                  {el.rating && (
+                                    <Badge className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200 font-mono text-[10px] px-1.5 h-4 shrink-0">
+                                      {el.rating}
+                                    </Badge>
+                                  )}
+                                  {/* text */}
+                                  <span className="text-xs text-muted-foreground truncate flex-1" title={el.text}>
+                                    {el.text}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Color swatches reflect the AutoCAD layer color (ACI) of each annotation.
-                  REI = Resistance / Insulation / Integrity (minutes). EI = Integrity / Insulation.
-                </p>
-              </CollapsibleSection>
-            )}
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    REI = Resistance / Insulation / Integrity (min). EI = Integrity / Insulation. Grouped by drawing layer / zone.
+                  </p>
+                </CollapsibleSection>
+              )
+            })()}
+
 
             {/* Evacuation Data */}
             {metadata.evacuation && metadata.evacuation.length > 0 && (

@@ -1480,12 +1480,36 @@ class DXFParser:
     
     def _extract_layers(self, doc) -> Dict[str, Any]:
         """Extract layer information"""
+        import colorsys
+        # Standard ACI index → RGB lookup (AutoCAD standard palette)
+        ACI_RGB = {
+            1: (255, 0, 0), 2: (255, 255, 0), 3: (0, 255, 0),
+            4: (0, 255, 255), 5: (0, 0, 255), 6: (255, 0, 255),
+            7: (255, 255, 255), 8: (65, 65, 65), 9: (128, 128, 128),
+        }
         layers = []
-        
+
         for layer in doc.layers:
+            aci = layer.dxf.color  # ACI index (1-255) or 256=BYLAYER
+            # Prefer ezdxf resolved true-color RGB if the layer has one
+            rgb: Optional[list] = None
+            try:
+                tc = layer.rgb  # ezdxf property; raises if not set
+                if tc is not None:
+                    rgb = list(tc)  # (r, g, b) tuple → list for JSON
+            except Exception:
+                pass
+            if rgb is None and aci in ACI_RGB:
+                rgb = list(ACI_RGB[aci])
+            elif rgb is None and 10 <= aci <= 249:
+                hue = (aci - 10) / 240.0
+                r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 0.9)
+                rgb = [int(r * 255), int(g * 255), int(b * 255)]
+
             layers.append({
                 "name": layer.dxf.name,
-                "color": layer.dxf.color,
+                "color": aci,
+                "rgb": rgb,
                 "linetype": layer.dxf.linetype,
                 "is_locked": layer.is_locked(),
                 "is_off": layer.is_off(),

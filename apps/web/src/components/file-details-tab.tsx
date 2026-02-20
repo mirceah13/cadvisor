@@ -213,6 +213,36 @@ function DataGrid({ data }: { data: Record<string, any> }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// AutoCAD Color Index (ACI) → CSS hex  
+// Colors 1-9 are the standard fixed ACI values; 10-249 use an approximated
+// hue wheel, 250-255 are standard grayscale steps.
+// ---------------------------------------------------------------------------
+function aciToHex(aci: number | undefined | null): string {
+  const fixed: Record<number, string> = {
+    1: '#FF0000', 2: '#FFFF00', 3: '#00FF00', 4: '#00FFFF',
+    5: '#0000FF', 6: '#FF00FF', 7: '#FFFFFF', 8: '#414141', 9: '#808080',
+    250: '#0D0D0D', 251: '#333333', 252: '#555555', 253: '#777777',
+    254: '#999999', 255: '#BBBBBB',
+  }
+  if (aci == null) return '#888888'
+  if (fixed[aci]) return fixed[aci]
+  if (aci >= 10 && aci <= 249) {
+    const hue = Math.round(((aci - 10) / 240) * 360)
+    return `hsl(${hue},80%,55%)`
+  }
+  return '#888888'
+}
+
+function aciToName(aci: number | undefined | null): string {
+  const names: Record<number, string> = {
+    1: 'Red', 2: 'Yellow', 3: 'Green', 4: 'Cyan',
+    5: 'Blue', 6: 'Magenta', 7: 'White', 8: 'Dark Gray', 9: 'Gray',
+  }
+  if (aci == null) return 'Default'
+  return names[aci] ?? `ACI ${aci}`
+}
+
 export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
@@ -271,6 +301,16 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
       return acc
     }, {} as Record<string, string>)
   }, [flatData, searchQuery])
+
+  // Build a layer-name → ACI color map for use in fire safety & layers sections
+  const layerColorMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    const layers = metadata?.layers?.layers
+    if (Array.isArray(layers)) {
+      layers.forEach((l: any) => { if (l?.name) map[l.name] = l.color })
+    }
+    return map
+  }, [metadata])
 
   if (files.length === 0) {
     return (
@@ -473,86 +513,98 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* File Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                   {/* File Size */}
-                  <div className="p-4 border rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/30 border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-blue-800/50 bg-gradient-to-b from-blue-950/50 to-blue-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)] dark:from-blue-950/50 dark:to-blue-950/80">
+                    <div className="p-1.5 rounded-md bg-blue-500/20 shrink-0">
+                      <FileText className="h-4 w-4 text-blue-400" />
                     </div>
-                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                      {selectedFile?.size_bytes 
-                        ? (selectedFile.size_bytes / 1024 / 1024).toFixed(2) 
-                        : selectedFile?.size 
-                          ? (selectedFile.size / 1024 / 1024).toFixed(2)
-                          : '?'} MB
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">File Size</p>
+                    <div className="min-w-0">
+                      <p className="text-base font-bold leading-none text-blue-100 truncate">
+                        {selectedFile?.size_bytes
+                          ? (selectedFile.size_bytes / 1024 / 1024).toFixed(2)
+                          : selectedFile?.size
+                            ? (selectedFile.size / 1024 / 1024).toFixed(2)
+                            : '?'} MB
+                      </p>
+                      <p className="text-[11px] text-blue-400/80 mt-1">File Size</p>
+                    </div>
                   </div>
 
                   {/* Format/Version */}
                   {(metadata.dxf_version || metadata.file_schema || metadata.source_format) && (
-                    <div className="p-4 border rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/30 dark:to-purple-900/30 border-purple-200 dark:border-purple-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Calculator className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-purple-800/50 bg-gradient-to-b from-purple-950/50 to-purple-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <div className="p-1.5 rounded-md bg-purple-500/20 shrink-0">
+                        <Calculator className="h-4 w-4 text-purple-400" />
                       </div>
-                      <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                        {metadata.dxf_version || metadata.file_schema || metadata.source_format?.toUpperCase()}
-                      </p>
-                      <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">Format/Version</p>
+                      <div className="min-w-0">
+                        <p className="text-base font-bold leading-none text-purple-100 truncate">
+                          {metadata.dxf_version || metadata.file_schema || metadata.source_format?.toUpperCase()}
+                        </p>
+                        <p className="text-[11px] text-purple-400/80 mt-1">Format</p>
+                      </div>
                     </div>
                   )}
 
                   {/* Entities/Elements */}
                   {(metadata.entities?.total || metadata.elements?.total_count) && (
-                    <div className="p-4 border rounded-lg bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 border-green-200 dark:border-green-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Box className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-green-800/50 bg-gradient-to-b from-green-950/50 to-green-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <div className="p-1.5 rounded-md bg-green-500/20 shrink-0">
+                        <Box className="h-4 w-4 text-green-400" />
                       </div>
-                      <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                        {metadata.entities?.total || metadata.elements?.total_count || 0}
-                      </p>
-                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">Total Entities</p>
+                      <div className="min-w-0">
+                        <p className="text-base font-bold leading-none text-green-100 truncate">
+                          {(metadata.entities?.total || metadata.elements?.total_count || 0).toLocaleString()}
+                        </p>
+                        <p className="text-[11px] text-green-400/80 mt-1">Entities</p>
+                      </div>
                     </div>
                   )}
 
                   {/* Rooms */}
                   {metadata.rooms?.count > 0 && (
-                    <div className="p-4 border rounded-lg bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-950/30 dark:to-teal-900/30 border-teal-200 dark:border-teal-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sofa className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-teal-800/50 bg-gradient-to-b from-teal-950/50 to-teal-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <div className="p-1.5 rounded-md bg-teal-500/20 shrink-0">
+                        <Sofa className="h-4 w-4 text-teal-400" />
                       </div>
-                      <p className="text-2xl font-bold text-teal-900 dark:text-teal-100">
-                        {metadata.rooms.count}
-                      </p>
-                      <p className="text-xs text-teal-700 dark:text-teal-300 mt-1">Rooms Identified</p>
+                      <div className="min-w-0">
+                        <p className="text-base font-bold leading-none text-teal-100 truncate">
+                          {metadata.rooms.count}
+                        </p>
+                        <p className="text-[11px] text-teal-400/80 mt-1">Rooms</p>
+                      </div>
                     </div>
                   )}
 
                   {/* Fire Elements */}
                   {metadata.fire_elements?.count > 0 && (
-                    <div className="p-4 border rounded-lg bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/30 border-red-200 dark:border-red-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Flame className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-red-800/50 bg-gradient-to-b from-red-950/50 to-red-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <div className="p-1.5 rounded-md bg-red-500/20 shrink-0">
+                        <Flame className="h-4 w-4 text-red-400" />
                       </div>
-                      <p className="text-2xl font-bold text-red-900 dark:text-red-100">
-                        {metadata.fire_elements.count}
-                      </p>
-                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">Fire Resistance Specs</p>
+                      <div className="min-w-0">
+                        <p className="text-base font-bold leading-none text-red-100 truncate">
+                          {metadata.fire_elements.count}
+                        </p>
+                        <p className="text-[11px] text-red-400/80 mt-1">Fire Specs</p>
+                      </div>
                     </div>
                   )}
 
                   {/* Layers/Storeys */}
                   {(metadata.layers?.count || metadata.storeys?.count) && (
-                    <div className="p-4 border rounded-lg bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/30 dark:to-orange-900/30 border-orange-200 dark:border-orange-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Layers className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-orange-800/50 bg-gradient-to-b from-orange-950/50 to-orange-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <div className="p-1.5 rounded-md bg-orange-500/20 shrink-0">
+                        <Layers className="h-4 w-4 text-orange-400" />
                       </div>
-                      <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                        {metadata.layers?.count || metadata.storeys?.count || 0}
-                      </p>
-                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
-                        {metadata.layers?.count ? 'Layers' : 'Storeys'}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="text-base font-bold leading-none text-orange-100 truncate">
+                          {metadata.layers?.count || metadata.storeys?.count || 0}
+                        </p>
+                        <p className="text-[11px] text-orange-400/80 mt-1">
+                          {metadata.layers?.count ? 'Layers' : 'Storeys'}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -703,75 +755,37 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 badge={metadata.layers.count}
                 defaultOpen={true}
               >
-                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-blue-900 dark:text-blue-100">
-                    <strong>What are layers?</strong> Layers organize drawing elements (walls, doors, etc.) into separate groups. Each layer has properties like color and line type.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  {metadata.layers.layers.slice(0, 10).map((layer: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="p-2 bg-primary/10 rounded">
-                          <Layers className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold">{layer.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Layer for {layer.name.toLowerCase().includes('wall') ? 'walls' :
-                                       layer.name.toLowerCase().includes('door') ? 'doors' :
-                                       layer.name.toLowerCase().includes('window') ? 'windows' :
-                                       layer.name.toLowerCase().includes('floor') ? 'floors' :
-                                       'drawing elements'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {layer.color !== undefined && (
-                          <div className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded">
-                            <div 
-                              className="w-3 h-3 rounded-full border"
-                              style={{ 
-                                backgroundColor: layer.color === 7 ? '#fff' : 
-                                                layer.color === 1 ? '#ff0000' :
-                                                layer.color === 2 ? '#ffff00' :
-                                                layer.color === 3 ? '#00ff00' :
-                                                layer.color === 4 ? '#00ffff' :
-                                                layer.color === 5 ? '#0000ff' :
-                                                layer.color === 6 ? '#ff00ff' :
-                                                '#888'
-                              }}
-                              title={`AutoCAD Color Index: ${layer.color}`}
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              {layer.color === 7 ? 'White' :
-                               layer.color === 1 ? 'Red' :
-                               layer.color === 2 ? 'Yellow' :
-                               layer.color === 3 ? 'Green' :
-                               layer.color === 4 ? 'Cyan' :
-                               layer.color === 5 ? 'Blue' :
-                               layer.color === 6 ? 'Magenta' :
-                               `Color ${layer.color}`}
-                            </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {metadata.layers.layers.slice(0, 18).map((layer: any, idx: number) => {
+                    const hex = aciToHex(layer.color)
+                    const colorName = aciToName(layer.color)
+                    const isDark = layer.color === 7 || layer.color == null
+                    return (
+                      <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                        {/* Color swatch */}
+                        <div
+                          className="w-8 h-8 rounded-md border border-white/10 shrink-0 shadow-inner"
+                          style={{ backgroundColor: hex, boxShadow: isDark ? '0 0 0 1px rgba(255,255,255,0.15) inset' : undefined }}
+                          title={`ACI ${layer.color} — ${colorName}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate leading-none">{layer.name}</p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-[10px] text-muted-foreground">{colorName}</span>
+                            {layer.linetype && layer.linetype !== 'Continuous' && layer.linetype !== 'CONTINUOUS' && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">{layer.linetype}</Badge>
+                            )}
                           </div>
-                        )}
-                        {layer.linetype && (
-                          <Badge variant="outline" className="text-xs" title="Line pattern for this layer">
-                            {layer.linetype === 'CONTINUOUS' ? '━━━ Solid' :
-                             layer.linetype === 'DASHED' ? '- - - Dashed' :
-                             layer.linetype === 'DOTTED' ? '··· Dotted' :
-                             layer.linetype}
-                          </Badge>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {metadata.layers.layers.length > 10 && (
-                    <p className="text-xs text-muted-foreground text-center py-2 bg-muted/50 rounded">
-                      +{metadata.layers.layers.length - 10} more layers (see Raw Data tab for complete list)
-                    </p>
-                  )}
+                    )
+                  })}
                 </div>
+                {metadata.layers.layers.length > 18 && (
+                  <p className="text-xs text-muted-foreground text-center mt-2 py-2 bg-muted/30 rounded">
+                    +{metadata.layers.layers.length - 18} more layers — see Raw Data tab for full list
+                  </p>
+                )}
               </CollapsibleSection>
             )}
 
@@ -783,27 +797,43 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 badge={metadata.rooms.count}
                 defaultOpen={true}
               >
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left p-2 font-semibold">Room Name</th>
-                        <th className="text-left p-2 font-semibold">Floor Covering</th>
-                        <th className="text-left p-2 font-semibold">Height</th>
-                        <th className="text-left p-2 font-semibold">Layer</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metadata.rooms.rooms.map((room: any, idx: number) => (
-                        <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="p-2 font-medium">{room.name}</td>
-                          <td className="p-2 text-muted-foreground">{room.floor_covering || '—'}</td>
-                          <td className="p-2">{room.height_m ? `${room.height_m} m` : '—'}</td>
-                          <td className="p-2"><code className="text-xs bg-muted px-1 rounded">{room.layer || '—'}</code></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {metadata.rooms.rooms.map((room: any, idx: number) => {
+                    const layerAci = layerColorMap[room.layer]
+                    const swatchHex = layerAci != null ? aciToHex(layerAci) : null
+                    return (
+                      <div key={idx} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                        {swatchHex && (
+                          <div
+                            className="w-2.5 self-stretch rounded-full shrink-0"
+                            style={{ backgroundColor: swatchHex }}
+                            title={room.layer}
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold leading-tight truncate">{room.name}</p>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {room.floor_covering && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                {room.floor_covering}
+                              </Badge>
+                            )}
+                            {room.height_m && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                h = {room.height_m} m
+                              </Badge>
+                            )}
+                            {room.floor_code && (
+                              <span className="text-[10px] text-muted-foreground font-mono">{room.floor_code}</span>
+                            )}
+                          </div>
+                          {room.layer && !swatchHex && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{room.layer}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </CollapsibleSection>
             )}
@@ -816,46 +846,56 @@ export function FileDetailsTab({ profile, files }: FileDetailsTabProps) {
                 badge={metadata.fire_elements.count}
                 defaultOpen={true}
               >
-                <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
-                  <p className="text-xs text-red-900 dark:text-red-100">
-                    Fire resistance ratings extracted from drawing annotations (MTEXT objects).
-                    REI = Resistance / Insulation / Integrity (minutes). EI = Integrity / Insulation.
-                  </p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left p-2 font-semibold">Element Type</th>
-                        <th className="text-left p-2 font-semibold">Rating</th>
-                        <th className="text-left p-2 font-semibold">Source Text</th>
-                        <th className="text-left p-2 font-semibold">Layer</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metadata.fire_elements.items.map((el: any, idx: number) => (
-                        <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="p-2">
-                            <Badge variant="outline" className="capitalize">
+                <div className="space-y-2">
+                  {metadata.fire_elements.items.map((el: any, idx: number) => {
+                    const layerAci = layerColorMap[el.layer]
+                    const swatchHex = aciToHex(layerAci)
+                    const colorName = aciToName(layerAci)
+                    return (
+                      <div key={idx} className="flex items-stretch gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors group">
+                        {/* Color swatch from layer ACI */}
+                        <div className="flex flex-col items-center gap-1 shrink-0">
+                          <div
+                            className="w-8 h-8 rounded-md border border-white/10 shadow-inner"
+                            style={{ backgroundColor: swatchHex }}
+                            title={`Layer: ${el.layer || '—'} · ACI ${layerAci ?? '?'} (${colorName})`}
+                          />
+                          <span className="text-[9px] text-muted-foreground leading-none">{colorName}</span>
+                        </div>
+                        {/* Content */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <Badge variant="outline" className="capitalize text-xs">
                               {el.element_type?.replace(/_/g, ' ') || 'general'}
                             </Badge>
-                          </td>
-                          <td className="p-2">
-                            {el.rating ? (
-                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100 font-mono">
+                            {el.rating && (
+                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-100 font-mono text-xs">
                                 {el.rating}
                               </Badge>
-                            ) : '—'}
-                          </td>
-                          <td className="p-2 text-xs text-muted-foreground max-w-xs truncate" title={el.text}>
+                            )}
+                            {el.all_ratings && el.all_ratings.length > 1 && el.all_ratings.slice(1).map((r: string, ri: number) => (
+                              <Badge key={ri} variant="outline" className="font-mono text-xs text-red-600 dark:text-red-400 border-red-300 dark:border-red-700">
+                                {r}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2" title={el.text}>
                             {el.text}
-                          </td>
-                          <td className="p-2"><code className="text-xs bg-muted px-1 rounded">{el.layer || '—'}</code></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </p>
+                          {el.layer && (
+                            <code className="text-[10px] bg-muted px-1 rounded mt-1 inline-block opacity-70">
+                              {el.layer}
+                            </code>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Color swatches reflect the AutoCAD layer color (ACI) of each annotation.
+                  REI = Resistance / Insulation / Integrity (minutes). EI = Integrity / Insulation.
+                </p>
               </CollapsibleSection>
             )}
 

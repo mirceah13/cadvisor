@@ -1196,85 +1196,23 @@ class DXFParser:
             },
         }
 
-    def _convert_dwg_with_libredwg(self, dwg_path: str) -> Optional[str]:
-        """
-        Convert DWG to DXF using LibreDWG's dwg2dxf utility (fallback).
-        Less reliable but works for simple drawings.
-        
-        Args:
-            dwg_path: Path to DWG file
-            
-        Returns:
-            Path to converted DXF file, or None if conversion fails
-        """
-        try:
-            temp_dir = tempfile.gettempdir()
-            dxf_path = Path(temp_dir) / f"{Path(dwg_path).stem}_libredwg.dxf"
-            
-            # Run dwg2dxf conversion
-            result = subprocess.run(
-                ["dwg2dxf", "-o", str(dxf_path), dwg_path],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0 and dxf_path.exists():
-                logger.info(f"LibreDWG conversion succeeded: {dxf_path}")
-                
-                # Clean up problematic MTEXT entities
-                logger.info("Cleaning DXF file to remove problematic MTEXT entities...")
-                cleaned_path, cleaned_count = self._clean_dxf_file(str(dxf_path))
-                
-                if cleaned_count > 0:
-                    logger.info(f"Removed {cleaned_count} problematic MTEXT entities")
-                
-                return cleaned_path
-            else:
-                logger.warning(f"LibreDWG conversion failed: {result.stderr}")
-                return None
-                
-        except subprocess.TimeoutExpired:
-            logger.error("LibreDWG conversion timed out after 60 seconds")
-            return None
-        except FileNotFoundError:
-            logger.debug("dwg2dxf (LibreDWG) not found")
-            return None
-        except Exception as e:
-            logger.warning(f"LibreDWG conversion error: {e}")
-            return None
-
     def _process_dwg_file(self, dwg_path: str) -> Optional[Dict[str, Any]]:
         """
-        Process DWG file using best available method.
-        Tries multiple methods in order of reliability:
-        1. Autodesk Platform Services (APS) - most reliable, 100% compatibility, direct metadata extraction
-        2. LibreDWG conversion to DXF - free fallback, ~60% success rate
+        Process DWG file using Autodesk Platform Services (APS).
         
         Args:
             dwg_path: Path to DWG file
             
         Returns:
-            Dictionary with extracted metadata, or None if all methods fail
+            Dictionary with extracted metadata, or None if processing fails
         """
         logger.info(f"Processing DWG file: {dwg_path}")
-        
-        # Method 1: Try Autodesk Platform Services (APS) first (best quality, direct metadata)
         logger.info("Attempting translation with Autodesk Platform Services (APS)...")
         result = self._translate_dwg_with_aps(dwg_path)
         if result:
             return result
         
-        # Method 2: Fallback to LibreDWG + ezdxf parsing (free but less reliable)
-        logger.info("APS not available, attempting conversion with LibreDWG...")
-        dxf_path = self._convert_dwg_with_libredwg(dwg_path)
-        if dxf_path:
-            # Parse the DXF file with ezdxf
-            logger.info(f"Parsing converted DXF file: {dxf_path}")
-            return self._parse_dxf_file(dxf_path, source_format="dwg")
-        
-        # All methods failed
-        logger.error("All DWG processing methods failed")
+        logger.error("APS DWG processing failed")
         return None
     
     def parse(self, file_path: str) -> Dict[str, Any]:
@@ -1293,14 +1231,14 @@ class DXFParser:
             
             if file_ext == '.dwg':
                 logger.info(f"DWG file detected, processing: {file_path}")
-                # Process DWG directly (APS translates to SVF2 + metadata, or LibreDWG converts to DXF)
+                # Process DWG directly using APS
                 result = self._process_dwg_file(file_path)
                 
                 if not result:
                     return {
                         "error": "DWG processing failed",
                         "processing_status": "failed",
-                        "message": "Could not process DWG file. All methods failed.",
+                        "message": "Could not process DWG file. APS is required for DWG parsing — ensure APS_CLIENT_ID and APS_CLIENT_SECRET are configured.",
                         "source_format": "dwg"
                     }
                 

@@ -48,7 +48,7 @@ export default function BillingPage() {
           apiClient.get('/billing/usage', {
             headers: { Authorization: `Bearer ${accessToken}` },
           }),
-        ])
+        ]) as [{ data: unknown }, { data: unknown }]
         setSubscription(subRes.data)
         setUsage(usageRes.data)
       } catch (error) {

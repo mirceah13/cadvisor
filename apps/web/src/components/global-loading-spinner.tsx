@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
-export function GlobalLoadingSpinner() {
+function GlobalLoadingSpinnerInner() {
   const [isLoading, setIsLoading] = useState(false)
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -46,6 +46,14 @@ export function GlobalLoadingSpinner() {
         </div>
       </div>
     </div>
+  )
+}
+
+export function GlobalLoadingSpinner() {
+  return (
+    <Suspense fallback={null}>
+      <GlobalLoadingSpinnerInner />
+    </Suspense>
   )
 }
 

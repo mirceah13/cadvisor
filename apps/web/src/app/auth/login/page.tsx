@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
@@ -9,7 +9,7 @@ import { LoadingLink } from '@/components/loading-link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useLoadingRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
@@ -221,3 +221,10 @@ export default function LoginPage() {
   )
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}

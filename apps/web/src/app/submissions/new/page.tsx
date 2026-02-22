@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { useAuth } from '@/hooks/use-auth'
@@ -25,7 +25,7 @@ interface UploadedFile {
   metadata?: any
 }
 
-export default function NewSubmissionPage() {
+function NewSubmissionPageInner() {
   const router = useLoadingRouter()
   const searchParams = useSearchParams()
   const { accessToken } = useAuth()
@@ -778,5 +778,13 @@ export default function NewSubmissionPage() {
         </div>
       </div>
     </>
+  )
+}
+
+export default function NewSubmissionPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewSubmissionPageInner />
+    </Suspense>
   )
 }

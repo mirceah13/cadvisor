@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LoadingLink } from '@/components/loading-link'
@@ -22,7 +23,7 @@ const errorMessages: Record<string, string> = {
   default: 'An unexpected error occurred during authentication. Please try again or use email/password login.'
 }
 
-export default function AuthErrorPage() {
+function AuthErrorPageInner() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error') || 'default'
 
@@ -106,3 +107,10 @@ export default function AuthErrorPage() {
   )
 }
 
+export default function AuthErrorPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuthErrorPageInner />
+    </Suspense>
+  )
+}

@@ -81,8 +81,10 @@ class Settings(BaseSettings):
     # MinIO/S3 Storage
     MINIO_ENDPOINT: str = Field(..., env="MINIO_ENDPOINT")
     MINIO_EXTERNAL_ENDPOINT: str = Field(default="localhost:9002", env="MINIO_EXTERNAL_ENDPOINT")
-    MINIO_ROOT_USER: str = Field(..., env="MINIO_ROOT_USER")
-    MINIO_ROOT_PASSWORD: str = Field(..., env="MINIO_ROOT_PASSWORD")
+    MINIO_ROOT_USER: Optional[str] = Field(default=None, env="MINIO_ROOT_USER")
+    MINIO_ROOT_PASSWORD: Optional[str] = Field(default=None, env="MINIO_ROOT_PASSWORD")
+    MINIO_ACCESS_KEY: Optional[str] = Field(default=None, env="MINIO_ACCESS_KEY")
+    MINIO_SECRET_KEY: Optional[str] = Field(default=None, env="MINIO_SECRET_KEY")
     MINIO_USE_SSL: bool = Field(default=False, env="MINIO_USE_SSL")
     MINIO_BUCKET_NAME: str = Field(default="buildguard-files", env="MINIO_BUCKET_NAME")
     MINIO_REGION: str = Field(default="us-east-1", env="MINIO_REGION")
@@ -94,14 +96,14 @@ class Settings(BaseSettings):
     APS_CLIENT_ID: Optional[str] = Field(default=None, env="APS_CLIENT_ID")
     APS_CLIENT_SECRET: Optional[str] = Field(default=None, env="APS_CLIENT_SECRET")
     
-    # Aliases for MinIO client
+    # Resolved MinIO credentials (accepts either naming convention)
     @property
-    def MINIO_ACCESS_KEY(self) -> str:
-        return self.MINIO_ROOT_USER
+    def minio_access_key(self) -> str:
+        return self.MINIO_ROOT_USER or self.MINIO_ACCESS_KEY or ""
     
     @property
-    def MINIO_SECRET_KEY(self) -> str:
-        return self.MINIO_ROOT_PASSWORD
+    def minio_secret_key(self) -> str:
+        return self.MINIO_ROOT_PASSWORD or self.MINIO_SECRET_KEY or ""
     
     @property
     def MINIO_BUCKET(self) -> str:
@@ -121,7 +123,7 @@ class Settings(BaseSettings):
     CLAMAV_PORT: int = Field(default=3310, env="CLAMAV_PORT")
     
     # AI Service
-    AI_SERVICE_BASE_URL: str = Field(..., env="AI_SERVICE_BASE_URL")
+    AI_SERVICE_BASE_URL: str = Field(default="http://localhost:8001", env="AI_SERVICE_BASE_URL")
     
     # Celery
     CELERY_BROKER_URL: str = Field(default="redis://redis:6379/0", env="CELERY_BROKER_URL")

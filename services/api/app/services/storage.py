@@ -25,8 +25,8 @@ class StorageService:
         # Instead downloads are proxied through the API via get_object_stream().
         self.client = Minio(
             settings.MINIO_ENDPOINT,
-            access_key=settings.MINIO_ACCESS_KEY,
-            secret_key=settings.MINIO_SECRET_KEY,
+            access_key=settings.minio_access_key,
+            secret_key=settings.minio_secret_key,
             secure=settings.MINIO_USE_SSL
         )
         self.bucket_name = settings.MINIO_BUCKET

@@ -1,6 +1,7 @@
 """
 Celery Worker Configuration
 """
+import ssl
 from celery import Celery
 from app.core.config import settings
 
@@ -10,6 +11,10 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
 )
+
+# SSL config for rediss:// (Upstash requires TLS)
+_is_rediss = settings.CELERY_BROKER_URL.startswith("rediss://")
+_ssl_config = {"ssl_cert_reqs": ssl.CERT_NONE} if _is_rediss else {}
 
 # Configure Celery
 celery_app.conf.update(
@@ -23,6 +28,8 @@ celery_app.conf.update(
     task_soft_time_limit=3300,  # 55 minutes
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=1000,
+    broker_use_ssl=_ssl_config if _is_rediss else None,
+    redis_backend_use_ssl=_ssl_config if _is_rediss else None,
 )
 
 # Import tasks

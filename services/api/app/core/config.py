@@ -89,8 +89,11 @@ class Settings(BaseSettings):
     MINIO_BUCKET_NAME: str = Field(default="buildguard-files", env="MINIO_BUCKET_NAME")
     MINIO_REGION: str = Field(default="us-east-1", env="MINIO_REGION")
     
-    # Ollama
+    # Ollama (legacy local dev only)
     OLLAMA_BASE_URL: str = Field(default="http://ollama:11434", env="OLLAMA_BASE_URL")
+
+    # Jina AI embeddings (free tier — https://jina.ai)
+    JINA_API_KEY: Optional[str] = Field(default=None, env="JINA_API_KEY")
     
     # Autodesk Platform Services (APS) - for DWG conversion
     APS_CLIENT_ID: Optional[str] = Field(default=None, env="APS_CLIENT_ID")

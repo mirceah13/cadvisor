@@ -1,6 +1,6 @@
 """
 Embedding Service
-Generates vector embeddings using Ollama
+Generates vector embeddings using Jina AI (free tier, 768 dims)
 """
 
 import logging
@@ -10,18 +10,20 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
+JINA_MODEL = "jina-embeddings-v2-base-en"  # 768 dims, matches EMBEDDING_DIMENSION
+
 
 class EmbeddingService:
-    """Service for generating text embeddings via Ollama"""
+    """Service for generating text embeddings via Jina AI"""
     
     def __init__(self):
-        self.base_url = settings.OLLAMA_BASE_URL
-        self.model = "nomic-embed-text"  # Optimized for RAG
-        self.dimension = 768  # nomic-embed-text dimension
+        self.api_key = settings.JINA_API_KEY
+        self.dimension = 768
         
     async def generate_embedding(self, text: str) -> Optional[List[float]]:
         """
-        Generate embedding vector for a single text
+        Generate embedding vector for a single text via Jina AI.
         
         Args:
             text: Text to embed
@@ -32,23 +34,31 @@ class EmbeddingService:
         if not text or not text.strip():
             logger.warning("Empty text provided for embedding")
             return None
+
+        if not self.api_key:
+            logger.error("JINA_API_KEY not set — cannot generate embedding")
+            return None
             
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/api/embeddings",
+                    JINA_EMBED_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
                     json={
-                        "model": self.model,
-                        "prompt": text
+                        "model": JINA_MODEL,
+                        "input": [text],
                     }
                 )
                 response.raise_for_status()
                 
                 data = response.json()
-                embedding = data.get("embedding")
+                embedding = data.get("data", [{}])[0].get("embedding")
                 
                 if not embedding:
-                    logger.error("No embedding returned from Ollama")
+                    logger.error("No embedding returned from Jina AI")
                     return None
                 
                 return embedding

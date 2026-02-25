@@ -282,7 +282,7 @@ export default function KnowledgeBaseDetailPage() {
                     Stop Processing
                   </Button>
                 )}
-                {(source.status === 'indexed' || source.status === 'ready' || source.status === 'completed') && (
+                {(source.status !== 'processing') && (
                   <Button
                     variant="outline"
                     size="sm"

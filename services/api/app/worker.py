@@ -32,11 +32,15 @@ celery_app.conf.update(
     redis_backend_use_ssl=_ssl_config if _is_rediss else None,
 )
 
-# Import tasks
-from app.tasks import file_tasks, kb_tasks, analysis_tasks, report_tasks
+# Import all task modules to register them with this celery_app instance
+from app.tasks import file_tasks, kb_tasks, analysis_tasks, report_tasks  # noqa: F401
+from app.tasks import cad, kb, analysis  # noqa: F401
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks([
+    "app.tasks.cad",
+    "app.tasks.kb",
+    "app.tasks.analysis",
     "app.tasks.file_tasks",
     "app.tasks.kb_tasks",
     "app.tasks.analysis_tasks",

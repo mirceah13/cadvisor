@@ -8,7 +8,7 @@ from uuid import UUID
 from typing import Dict, Any
 import asyncio
 
-from app.core.celery_app import celery_app
+from app.worker import celery_app
 from app.core.database import SessionLocal
 from app.models import KnowledgeSource, File
 from app.services.knowledge_base import KnowledgeBaseService

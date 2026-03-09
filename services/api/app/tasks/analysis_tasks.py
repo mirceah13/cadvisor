@@ -1,5 +1,5 @@
 # Placeholder for analysis tasks
-from app.worker import celery_app
+from app.core.celery_app import celery_app
 
 @celery_app.task(name="run_submission_analysis")
 def run_submission_analysis(analysis_run_id: str):

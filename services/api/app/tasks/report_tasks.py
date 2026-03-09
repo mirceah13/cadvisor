@@ -1,5 +1,5 @@
 # Placeholder for report generation tasks
-from app.worker import celery_app
+from app.core.celery_app import celery_app
 
 @celery_app.task(name="generate_pdf_report")
 def generate_pdf_report(analysis_run_id: str):

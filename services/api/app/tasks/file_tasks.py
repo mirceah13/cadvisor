@@ -1,5 +1,5 @@
 # Placeholder for file processing tasks
-from app.worker import celery_app
+from app.core.celery_app import celery_app
 
 @celery_app.task(name="process_file_upload")
 def process_file_upload(file_id: str):

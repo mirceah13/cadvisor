@@ -131,6 +131,21 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = Field(default="redis://redis:6379/0", env="CELERY_BROKER_URL")
     CELERY_RESULT_BACKEND: str = Field(default="redis://redis:6379/0", env="CELERY_RESULT_BACKEND")
+
+    @field_validator("CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", "REDIS_URL", mode="before")
+    @classmethod
+    def strip_redis_query_params(cls, v: str) -> str:
+        """Strip query-string params (e.g. ?ssl_cert_reqs=CERT_NONE) from Redis URLs.
+        SSL is configured in code via broker_use_ssl; query params confuse Kombu's
+        URL parser and can corrupt hostname resolution.
+        """
+        if isinstance(v, str) and ("redis://" in v or "rediss://" in v):
+            from urllib.parse import urlsplit, urlunsplit
+            parts = urlsplit(v)
+            # Rebuild without query string or fragment; ensure /0 db path
+            path = parts.path if parts.path else "/0"
+            return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+        return v
     
     # Billing
     BILLING_PROVIDER: str = Field(default="mock", env="BILLING_PROVIDER")

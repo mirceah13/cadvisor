@@ -83,14 +83,15 @@ class KnowledgeBaseService:
         self.db.commit()
         self.db.refresh(source)
         
-        # Generate embeddings and store chunks
+        # Generate ALL embeddings in batches (one HTTP call per 100 chunks)
+        all_texts = [chunk.text for chunk in chunks]
+        all_embeddings = await self.embedding_service.generate_embeddings_batch(all_texts)
+        
+        # Store chunks with their embeddings
         chunks_created = 0
         total_chunks = len(chunks)
         
-        for i, chunk in enumerate(chunks):
-            # Generate embedding
-            embedding = await self.embedding_service.generate_embedding(chunk.text)
-            
+        for i, (chunk, embedding) in enumerate(zip(chunks, all_embeddings)):
             if not embedding:
                 logger.warning(f"Failed to generate embedding for chunk {chunk.chunk_index}")
                 continue
@@ -113,8 +114,8 @@ class KnowledgeBaseService:
             self.db.add(kb_chunk)
             chunks_created += 1
             
-            # Update progress every 10 chunks or on last chunk (ensure monotonic increase)
-            if (i + 1) % 10 == 0 or (i + 1) == total_chunks:
+            # Update progress every 50 chunks or on last chunk
+            if (i + 1) % 50 == 0 or (i + 1) == total_chunks:
                 current_progress = source.meta_data.get("progress", {}).get("processed_chunks", 0)
                 if (i + 1) > current_progress:
                     source.meta_data["progress"] = {

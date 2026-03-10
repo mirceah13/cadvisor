@@ -90,38 +90,7 @@ class EmbeddingService:
             all_embeddings.extend(batch_result)
 
         return all_embeddings
-    
-    async def generate_embeddings_batch(
-        self,
-        texts: List[str],
-        batch_size: int = 10
-    ) -> List[Optional[List[float]]]:
-        """
-        Generate embeddings for multiple texts
-        
-        Args:
-            texts: List of texts to embed
-            batch_size: Number of texts to process in parallel
-            
-        Returns:
-            List of embedding vectors (None for failed embeddings)
-        """
-        embeddings = []
-        
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            batch_embeddings = []
-            
-            for text in batch:
-                embedding = await self.generate_embedding(text)
-                batch_embeddings.append(embedding)
-            
-            embeddings.extend(batch_embeddings)
-            
-            logger.info(f"Generated {len(batch_embeddings)} embeddings ({i + len(batch)}/{len(texts)})")
-        
-        return embeddings
-    
+
     def get_embedding_dimension(self) -> int:
         """Get the dimension of embeddings"""
         return self.dimension

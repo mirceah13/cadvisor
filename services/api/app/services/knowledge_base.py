@@ -50,7 +50,22 @@ class KnowledgeBaseService:
         
         if not source:
             raise ValueError(f"KnowledgeSource {source_id} not found")
-        
+
+        # Delete existing chunks and images so re-processing starts clean
+        deleted = self.db.query(KBChunk).filter(
+            KBChunk.knowledge_source_id == source_id
+        ).delete(synchronize_session=False)
+        if deleted:
+            logger.info(f"Deleted {deleted} existing chunks for source {source_id} before re-ingestion")
+        try:
+            from app.models import KBImage
+            self.db.query(KBImage).filter(
+                KBImage.knowledge_source_id == source_id
+            ).delete(synchronize_session=False)
+        except Exception:
+            pass  # KBImage table may not exist yet
+        self.db.commit()
+
         # Select chunking strategy
         if chunking_strategy == "code_standards":
             chunker = ChunkingStrategy.code_standards()

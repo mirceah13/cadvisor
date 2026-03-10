@@ -340,8 +340,8 @@ class KBImage(Base, TimestampMixin):
     ocr_confidence = Column(Float, nullable=True)
     ocr_language = Column(String(20), nullable=True)
     
-    # Visual embedding (CLIP dimension: 512)
-    visual_embedding = Column(Vector(512), nullable=True)
+    # Visual embedding (Jina CLIP jina-clip-v1 dimension: 768)
+    visual_embedding = Column(Vector(768), nullable=True)
     
     # Metadata: page number, annotations, technical specs, etc.
     image_metadata = Column('metadata', JSONB, nullable=True)

@@ -1,260 +1,86 @@
 """
 Visual Embedding Service
-Generates visual embeddings using CLIP for image similarity search
+Generates visual embeddings via Jina CLIP API (jina-clip-v1, 768 dims).
+No local GPU or model download required — identical approach to text embeddings.
 """
 
+import base64
 import logging
 from typing import List, Optional
-from PIL import Image
-import io
 
-try:
-    import numpy as np
-    _NUMPY_AVAILABLE = True
-except Exception as _np_err:  # catches numpy.core.multiarray and similar
-    _NUMPY_AVAILABLE = False
-    import logging as _log
-    _log.getLogger(__name__).warning(f"numpy unavailable in visual_embeddings: {_np_err}")
+import httpx
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+JINA_CLIP_URL = "https://api.jina.ai/v1/embeddings"
+JINA_CLIP_MODEL = "jina-clip-v1"   # 768 dims, multimodal (text + image)
+JINA_CLIP_DIMENSION = 768
+
 
 class VisualEmbeddingService:
-    """Service for generating visual embeddings using CLIP"""
-    
+    """Service for generating visual embeddings using Jina CLIP API"""
+
     def __init__(self):
-        self.model = None
-        self.processor = None
-        self.device = None
-        self.dimension = 512  # CLIP ViT-B/32 dimension
-        self._initialize_model()
-    
-    def _initialize_model(self):
-        """Initialize CLIP model — failures are non-fatal"""
-        if not _NUMPY_AVAILABLE:
-            logger.warning("Skipping CLIP model init: numpy not available")
-            self.model = None
-            return
-        try:
-            from sentence_transformers import SentenceTransformer
-            import torch
+        self.api_key = settings.JINA_API_KEY
+        self.dimension = JINA_CLIP_DIMENSION
 
-            # Use CLIP model from sentence-transformers (easier integration)
-            self.model = SentenceTransformer('clip-ViT-B-32')
-
-            # Set device
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            self.model.to(self.device)
-
-            logger.info(f"CLIP model initialized on {self.device}")
-
-        except Exception as e:
-            logger.warning(f"CLIP model unavailable (visual embeddings disabled): {e}")
-            self.model = None
-    
     def generate_image_embedding(
         self,
         image_data: bytes
     ) -> Optional[List[float]]:
         """
-        Generate embedding for an image
-        
+        Generate embedding for raw image bytes via Jina CLIP API.
+
         Args:
             image_data: Raw image bytes
-            
+
         Returns:
-            List of floats representing the visual embedding
+            List of 768 floats, or None on failure
         """
-        if not self.model:
-            logger.warning("CLIP model not available")
+        if not self.api_key:
+            logger.warning("JINA_API_KEY not set — cannot generate image embeddings")
             return None
-        
+
         try:
-            # Load image from bytes
-            image = Image.open(io.BytesIO(image_data))
-            
-            # Convert to RGB if necessary
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            
-            # Generate embedding
-            embedding = self.model.encode(image, convert_to_numpy=True)
-            
-            # Convert to list and normalize
-            embedding_list = embedding.tolist()
-            
-            return embedding_list
-            
+            encoded = base64.b64encode(image_data).decode("utf-8")
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    JINA_CLIP_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": JINA_CLIP_MODEL,
+                        "input": [{"image": encoded}],
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+            return data["data"][0]["embedding"]
         except Exception as e:
-            logger.error(f"Error generating image embedding: {e}", exc_info=True)
+            logger.error(f"Error generating image embedding via Jina: {e}", exc_info=True)
             return None
-    
+
     def generate_image_embedding_from_path(
         self,
         image_path: str
     ) -> Optional[List[float]]:
         """
-        Generate embedding from image file path
-        
+        Generate embedding from image file path.
+
         Args:
             image_path: Path to image file
-            
+
         Returns:
-            Visual embedding vector
+            Visual embedding vector or None on failure
         """
-        if not self.model:
-            logger.warning("CLIP model not available")
-            return None
-        
         try:
-            # Load image
-            image = Image.open(image_path)
-            
-            # Convert to RGB
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            
-            # Generate embedding
-            embedding = self.model.encode(image, convert_to_numpy=True)
-            
-            return embedding.tolist()
-            
+            with open(image_path, "rb") as f:
+                image_data = f.read()
+            return self.generate_image_embedding(image_data)
         except Exception as e:
-            logger.error(f"Error generating embedding from {image_path}: {e}", exc_info=True)
+            logger.error(f"Error reading image for embedding {image_path}: {e}", exc_info=True)
             return None
-    
-    def generate_text_embedding(
-        self,
-        text: str
-    ) -> Optional[List[float]]:
-        """
-        Generate CLIP text embedding (for cross-modal search)
-        
-        Args:
-            text: Text description
-            
-        Returns:
-            Text embedding in same space as visual embeddings
-        """
-        if not self.model:
-            logger.warning("CLIP model not available")
-            return None
-        
-        try:
-            # Generate text embedding
-            embedding = self.model.encode(text, convert_to_numpy=True)
-            
-            return embedding.tolist()
-            
-        except Exception as e:
-            logger.error(f"Error generating text embedding: {e}", exc_info=True)
-            return None
-    
-    def compute_similarity(
-        self,
-        embedding1: List[float],
-        embedding2: List[float]
-    ) -> float:
-        """
-        Compute cosine similarity between two embeddings
-
-        Args:
-            embedding1: First embedding vector
-            embedding2: Second embedding vector
-
-        Returns:
-            Similarity score (0-1)
-        """
-        if not _NUMPY_AVAILABLE:
-            logger.warning("compute_similarity unavailable: numpy not available")
-            return 0.0
-        try:
-            # Convert to numpy arrays
-            vec1 = np.array(embedding1)
-            vec2 = np.array(embedding2)
-
-            # Compute cosine similarity
-            dot_product = np.dot(vec1, vec2)
-            norm1 = np.linalg.norm(vec1)
-            norm2 = np.linalg.norm(vec2)
-
-            if norm1 == 0 or norm2 == 0:
-                return 0.0
-
-            similarity = dot_product / (norm1 * norm2)
-
-            return float(similarity)
-
-        except Exception as e:
-            logger.error(f"Error computing similarity: {e}")
-            return 0.0
-    
-    def batch_generate_embeddings(
-        self,
-        image_paths: List[str],
-        batch_size: int = 8
-    ) -> List[Optional[List[float]]]:
-        """
-        Generate embeddings for multiple images efficiently
-        
-        Args:
-            image_paths: List of image file paths
-            batch_size: Number of images to process at once
-            
-        Returns:
-            List of embedding vectors
-        """
-        if not self.model:
-            logger.warning("CLIP model not available")
-            return [None] * len(image_paths)
-        
-        embeddings = []
-        
-        for i in range(0, len(image_paths), batch_size):
-            batch_paths = image_paths[i:i + batch_size]
-            
-            try:
-                # Load images
-                images = []
-                for path in batch_paths:
-                    try:
-                        img = Image.open(path)
-                        if img.mode != 'RGB':
-                            img = img.convert('RGB')
-                        images.append(img)
-                    except Exception as e:
-                        logger.warning(f"Failed to load {path}: {e}")
-                        images.append(None)
-                
-                # Filter out failed images
-                valid_images = [img for img in images if img is not None]
-                
-                if valid_images:
-                    # Generate embeddings for batch
-                    batch_embeddings = self.model.encode(
-                        valid_images,
-                        convert_to_numpy=True,
-                        batch_size=batch_size
-                    )
-                    
-                    # Map back to original order
-                    emb_idx = 0
-                    for img in images:
-                        if img is not None:
-                            embeddings.append(batch_embeddings[emb_idx].tolist())
-                            emb_idx += 1
-                        else:
-                            embeddings.append(None)
-                else:
-                    embeddings.extend([None] * len(batch_paths))
-                    
-            except Exception as e:
-                logger.error(f"Error in batch embedding generation: {e}")
-                embeddings.extend([None] * len(batch_paths))
-        
-        logger.info(f"Generated {sum(1 for e in embeddings if e is not None)}/{len(image_paths)} embeddings")
-        return embeddings
-    
-    def get_embedding_dimension(self) -> int:
-        """Get the dimension of embeddings"""
-        return self.dimension

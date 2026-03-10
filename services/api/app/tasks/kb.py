@@ -329,13 +329,8 @@ def _process_document_images(source: 'KnowledgeSource', file: 'File', db) -> int
                     # Perform OCR
                     ocr_result = ocr_service.extract_technical_annotations(img_temp_path)
                     
-                    # Generate visual embedding
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        visual_embedding = visual_embedder.generate_image_embedding(img_data['data'])
-                    finally:
-                        loop.close()
+                    # Generate visual embedding via Jina CLIP API (sync HTTP call)
+                    visual_embedding = visual_embedder.generate_image_embedding(img_data['data'])
                     
                     # Upload image to MinIO
                     image_storage_key = f"orgs/{source.org_id}/kb/{source.id}/images/{img_data['hash']}{img_data['format']}"

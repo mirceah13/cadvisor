@@ -88,9 +88,10 @@ class ChunkingService:
                     chunk_index += 1
                 
                 # Start new chunk with overlap
+                old_chunk_len = len(current_chunk)  # capture before reassignment
                 overlap_text = self._get_overlap(current_chunk)
+                current_start = current_start + old_chunk_len - len(overlap_text)
                 current_chunk = overlap_text + para
-                current_start = current_start + len(current_chunk) - len(overlap_text)
             else:
                 current_chunk += para
         

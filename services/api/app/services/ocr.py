@@ -6,8 +6,6 @@ Extracts text from images using Tesseract
 import logging
 from typing import Optional, Dict, Any
 from pathlib import Path
-import cv2
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +52,7 @@ class OCRService:
             }
         
         try:
+            import cv2
             import pytesseract
             
             # Read image
@@ -114,7 +113,7 @@ class OCRService:
                 'error': str(e)
             }
     
-    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+    def _preprocess_image(self, image: 'np.ndarray') -> 'np.ndarray':
         """
         Preprocess image for better OCR results
         
@@ -148,9 +147,11 @@ class OCRService:
         
         return thresh
     
-    def _deskew(self, image: np.ndarray) -> np.ndarray:
+    def _deskew(self, image: 'np.ndarray') -> 'np.ndarray':
         """Deskew image to correct rotation"""
         try:
+            import cv2
+            import numpy as np
             coords = np.column_stack(np.where(image > 0))
             angle = cv2.minAreaRect(coords)[-1]
             

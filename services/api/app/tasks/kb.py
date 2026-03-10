@@ -103,7 +103,7 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         try:
             image_count = _process_document_images(source, file, db) if file else 0
         except Exception as img_err:
-            logger.warning(f"Image processing failed (non-fatal) for {source_id}: {img_err}")
+            logger.error(f"Image processing failed (non-fatal) for {source_id}: {img_err}", exc_info=True)
             image_count = 0
 
         logger.info(f"Extracted {image_count} images from source {source_id}")

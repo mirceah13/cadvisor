@@ -99,15 +99,6 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         db.commit()
         db.refresh(source)
         
-        # Extract and process images from document (errors here do NOT fail the task)
-        try:
-            image_count = _process_document_images(source, file, db) if file else 0
-        except Exception as img_err:
-            logger.error(f"Image processing failed (non-fatal) for {source_id}: {img_err}", exc_info=True)
-            image_count = 0
-
-        logger.info(f"Extracted {image_count} images from source {source_id}")
-        
         # Determine chunking strategy
         chunking_strategy = "general"
         if source.category in ["building_code", "fire_safety", "accessibility"]:
@@ -115,7 +106,9 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
         elif source.category in ["technical_spec", "engineering"]:
             chunking_strategy = "technical_specs"
         
-        # Ingest document (chunk and embed)
+        # Ingest document (chunk and embed).
+        # NOTE: ingest_document deletes existing KBChunk + KBImage rows first,
+        # so image processing MUST run AFTER this to avoid being wiped.
         kb_service = KnowledgeBaseService(db)
         
         # Run async embedding in sync context
@@ -134,6 +127,16 @@ def ingest_knowledge_source(self, source_id: str) -> Dict[str, Any]:
             loop.close()
         
         logger.info(f"Successfully ingested source {source_id} with {chunks_count} chunks")
+        
+        # Extract and process images AFTER chunk ingestion so the KBImage
+        # cleanup inside ingest_document does not wipe freshly-saved images.
+        try:
+            image_count = _process_document_images(source, file, db) if file else 0
+        except Exception as img_err:
+            logger.error(f"Image processing failed (non-fatal) for {source_id}: {img_err}", exc_info=True)
+            image_count = 0
+
+        logger.info(f"Extracted {image_count} images from source {source_id}")
         
         return {
             "success": True,
@@ -387,7 +390,7 @@ def _process_document_images(source: 'KnowledgeSource', file: 'File', db) -> int
                         logger.info(f"Processed {images_processed}/{len(extracted_images)} images")
                         
                 except Exception as e:
-                    logger.warning(f"Failed to process image {idx}: {e}")
+                    logger.warning(f"Failed to process image {idx}: {e}", exc_info=True)
                     continue
             
             # Final commit

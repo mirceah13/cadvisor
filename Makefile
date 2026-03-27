@@ -1,4 +1,4 @@
-.PHONY: help dev up down build clean migrate seed test lint format logs
+.PHONY: help dev up down build clean migrate seed test lint format logs local-setup local-infra local-worker logs-worker
 
 # Default target
 .DEFAULT_GOAL := help
@@ -156,6 +156,40 @@ setup: ## Initial setup (build, migrate, seed, pull models)
 	$(MAKE) ollama-pull
 	docker-compose up -d
 	@echo "Setup complete! Access the app at http://localhost:3000"
+
+# -------------------------------------------------------
+# Local development (without Ollama — uses Jina API + MinIO)
+# -------------------------------------------------------
+local-setup: ## First-time local setup: copy env, start infra, run migrations
+	@if [ ! -f .env ]; then \
+	  cp .env.local.example .env; \
+	  echo ""; \
+	  echo ">> .env created from .env.local.example"; \
+	  echo ">> IMPORTANT: open .env and set your JINA_API_KEY before continuing."; \
+	  echo ""; \
+	else \
+	  echo ">> .env already exists — skipping copy"; \
+	fi
+	$(MAKE) local-infra
+	@echo "Waiting for DB to be ready..."
+	sleep 8
+	docker-compose exec api alembic upgrade head
+	@echo ""
+	@echo "Local stack is ready:"
+	@echo "  API:          http://localhost:8000"
+	@echo "  Web:          http://localhost:3000"
+	@echo "  MinIO console: http://localhost:9001  (minioadmin / minioadmin_local)"
+	@echo ""
+	@echo "To watch Celery logs:  make logs-worker"
+
+local-infra: ## Start only infra + API + worker (no Ollama)
+	docker-compose up -d postgres redis minio minio-init api celery-worker web
+
+local-worker: ## Restart the Celery worker (after code changes)
+	docker-compose restart celery-worker
+
+logs-worker: ## Tail Celery worker logs
+	docker-compose logs -f celery-worker
 
 backup-db: ## Backup database to file
 	docker-compose exec -T postgres pg_dump -U buildguard buildguard > backup_$(shell date +%Y%m%d_%H%M%S).sql

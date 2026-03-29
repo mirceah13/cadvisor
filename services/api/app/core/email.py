@@ -1,19 +1,16 @@
 """
-Email service — async SMTP sending via thread executor.
+Email service — async SMTP sending via asyncio.to_thread (no executor needed).
 No additional dependencies required (uses stdlib smtplib).
 """
 import asyncio
 import logging
 import smtplib
-from concurrent.futures import ThreadPoolExecutor
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="email")
 
 
 # ---------------------------------------------------------------------------
@@ -42,11 +39,10 @@ async def send_email(to: str, subject: str, html: str) -> None:
         logger.info("[EMAIL DISABLED] To=%s | Subject=%s", to, subject)
         return
     try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(_executor, _send_smtp, to, subject, html)
+        await asyncio.to_thread(_send_smtp, to, subject, html)
         logger.info("Email sent: To=%s | Subject=%s", to, subject)
     except Exception as exc:
-        logger.error("Failed to send email to %s: %s", to, exc)
+        logger.error("Failed to send email to %s: %s | SMTP=%s:%s", to, exc, settings.SMTP_HOST, settings.SMTP_PORT)
 
 
 # ---------------------------------------------------------------------------

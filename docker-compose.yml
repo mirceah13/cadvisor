@@ -110,7 +110,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: infra/docker/api.Dockerfile
+      dockerfile: infra/docker/api.local.Dockerfile
     container_name: cadvisor-api
     environment:
       - DATABASE_URL=${DATABASE_URL}
@@ -197,7 +197,7 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: infra/docker/api.Dockerfile
+      dockerfile: infra/docker/api.local.Dockerfile
     container_name: cadvisor-celery-worker
     environment:
       - DATABASE_URL=${DATABASE_URL}
@@ -232,8 +232,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKERS:-4}
     networks:
       - cadvisor-network
@@ -242,7 +240,7 @@ services:
   celery-beat:
     build:
       context: .
-      dockerfile: infra/docker/api.Dockerfile
+      dockerfile: infra/docker/api.local.Dockerfile
     container_name: cadvisor-celery-beat
     environment:
       - DATABASE_URL=${DATABASE_URL}

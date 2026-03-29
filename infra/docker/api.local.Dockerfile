@@ -1,4 +1,5 @@
-# API Service Dockerfile
+# API Service Dockerfile — LOCAL DEV (no LibreDWG compilation)
+# For production, use api.Dockerfile which includes LibreDWG for DWG conversion
 FROM python:3.11-slim
 
 WORKDIR /app

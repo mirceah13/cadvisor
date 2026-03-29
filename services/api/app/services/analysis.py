@@ -313,7 +313,12 @@ class AnalysisEngine:
             self.db.add(finding)
             findings.append(finding)
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to save findings for {check_type}: {e}")
+            raise
 
         logger.info(f"Created {len(findings)} findings for {check_type}")
         return findings
@@ -456,12 +461,17 @@ class AnalysisEngine:
             
             self.db.add(finding)
             findings.append(finding)
-        
-        self.db.commit()
-        
+
+        try:
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to save fire safety findings: {e}")
+            raise
+
         if progress_callback:
             progress_callback(100)
-        
+
         logger.info(f"Fire safety check completed with {len(findings)} findings")
         return findings
     

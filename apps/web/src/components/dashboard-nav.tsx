@@ -33,23 +33,24 @@ export function DashboardNav() {
   const { user, signOut } = useAuth()
 
   return (
-    <div className="border-b">
+    <div className="border-b bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
       <div className="flex h-16 items-center px-4 container">
-        <LoadingLink href="/dashboard" className="flex items-center mr-6">
+        <LoadingLink href="/dashboard" className="flex items-center mr-8">
           <Logo width={32} height={32} showText={true} />
         </LoadingLink>
-        <nav className="flex items-center space-x-4 lg:space-x-6 flex-1">
+        <nav className="flex items-center gap-1 flex-1">
           {navigation.map((item) => {
             const Icon = item.icon
+            const isActive = pathname === item.href
             return (
               <LoadingLink
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  'text-sm font-medium transition-colors hover:text-primary flex items-center gap-2',
-                  pathname === item.href
-                    ? 'text-foreground'
-                    : 'text-muted-foreground'
+                  'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all',
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -58,15 +59,15 @@ export function DashboardNav() {
             )
           })}
         </nav>
-        <div className="ml-auto flex items-center space-x-4">
+        <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
           <LoadingLink href="/profile">
-            <Button variant="ghost" size="sm" className="gap-2">
+            <Button variant="ghost" size="sm" className="gap-2 rounded-full">
               <User className="h-4 w-4" />
               {user?.name || user?.email}
             </Button>
           </LoadingLink>
-          <Button variant="ghost" size="sm" onClick={() => signOut()} className="gap-2">
+          <Button variant="ghost" size="sm" onClick={() => signOut()} className="gap-2 rounded-full">
             <LogOut className="h-4 w-4" />
             Logout
           </Button>

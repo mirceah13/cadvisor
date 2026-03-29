@@ -54,10 +54,6 @@ pymupdf==1.23.8  # For PDF image extraction
 numpy==1.26.3
 pytesseract==0.3.10
 opencv-python-headless==4.9.0.80
-torch==2.3.1
-torchvision==0.18.1
-transformers==4.38.2
-sentence-transformers==2.7.0
 
 # PDF Generation
 reportlab==4.0.9

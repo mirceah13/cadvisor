@@ -107,11 +107,15 @@ def run_compliance_analysis(
     
     except Exception as e:
         logger.error(f"Error analyzing submission {submission_id}: {e}", exc_info=True)
-        
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
         # Retry on transient errors
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e)
-        
+
         return {
             "success": False,
             "submission_id": submission_id,

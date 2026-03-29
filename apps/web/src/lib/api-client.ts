@@ -237,3 +237,51 @@ export interface SubmissionTrendData {
   data: DayDataPoint[]
 }
 
+// Types for projects
+export interface Project {
+  id: string
+  name: string
+  description?: string | null
+  building_type?: string | null
+  org_id: string
+  created_at: string
+  updated_at: string
+  last_analysis_at?: string | null
+  _count?: {
+    submissions: number
+    analyzed: number
+  }
+}
+
+export interface ProjectSubmission {
+  id: string
+  name: string
+  status: string
+  created_at: string
+  findings_count: number
+}
+
+export interface ProjectFindingsSummary {
+  critical: number
+  high: number
+  medium: number
+  low: number
+  total: number
+}
+
+// Projects API
+export const projectsApi = {
+  list: (params?: { search?: string; building_type?: string; sort?: string; order?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString() : ''
+    return api.get<Project[]>(`/projects${qs}`)
+  },
+  get: (id: string) => api.get<Project>(`/projects/${id}`),
+  create: (data: { name: string; description?: string; type?: string }) =>
+    api.post<Project>('/projects', data),
+  update: (id: string, data: { name?: string; description?: string; type?: string }) =>
+    api.put<Project>(`/projects/${id}`, data),
+  remove: (id: string) => api.delete(`/projects/${id}`),
+  getSubmissions: (id: string) => api.get<ProjectSubmission[]>(`/projects/${id}/submissions`),
+  getFindingsSummary: (id: string) => api.get<ProjectFindingsSummary>(`/projects/${id}/findings-summary`),
+}
+

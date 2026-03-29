@@ -16,15 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useAuth } from '@/hooks/use-auth'
-import { apiClient } from '@/lib/api-client'
+import { projectsApi } from '@/lib/api-client'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { LoadingLink } from '@/components/loading-link'
 
 export default function NewProjectPage() {
   const router = useLoadingRouter()
-  const { accessToken } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -39,14 +37,7 @@ export default function NewProjectPage() {
     setError('')
 
     try {
-      const response = await apiClient.post('/projects', formData, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        timeout: 10000, // 10 second timeout
-      })
-      
-      // Handle both response.data and direct response
-      const project = response.data || response
-      
+      const project = await projectsApi.create(formData)
       if (project?.id) {
         router.push(`/projects/${project.id}`)
       } else {

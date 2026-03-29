@@ -63,10 +63,18 @@ async def create_submission(
     db: Session = Depends(get_db)
 ):
     """Create a new submission"""
-    # Verify project ownership
+    # Verify the project belongs to the user's organisation (not just created_by)
+    org_member = db.query(OrgMember).filter(
+        OrgMember.user_id == current_user.id
+    ).first()
+    if not org_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active organization membership"
+        )
     project = db.query(Project).filter(
         Project.id == submission_data.project_id,
-        Project.created_by == current_user.id
+        Project.org_id == org_member.org_id
     ).first()
     
     if not project:
@@ -121,14 +129,20 @@ async def list_submissions(
     project_id: Optional[UUID] = None,
     status: Optional[str] = None,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List submissions for the user"""
-    # Get user's projects first
+    limit = min(limit, 100)  # cap at 100
+    # Get user's org and all its projects
+    org_member = db.query(OrgMember).filter(
+        OrgMember.user_id == current_user.id
+    ).first()
+    if not org_member:
+        return []
     user_projects = db.query(Project).filter(
-        Project.created_by == current_user.id
+        Project.org_id == org_member.org_id
     ).all()
     
     project_ids = [p.id for p in user_projects]

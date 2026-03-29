@@ -88,7 +88,7 @@ export function DashboardOverview() {
     {
       title: 'Total Findings',
       value: stats.findings.total,
-      sub: `${stats.findings.critical + stats.findings.high} need attention`,
+      sub: `${stats.findings.critical + stats.findings.high + stats.findings.medium} need attention`,
       icon: CheckCircle2,
       link: '/submissions',
     },

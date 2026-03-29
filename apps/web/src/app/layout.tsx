@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { LoadingBar } from '@/components/loading-bar'
 import { GlobalLoadingSpinner } from '@/components/global-loading-spinner'
+import { IdleWarningDialog } from '@/components/idle-warning-dialog'
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -35,6 +36,7 @@ export default function RootLayout({
           >
             <LoadingBar />
             <GlobalLoadingSpinner />
+            <IdleWarningDialog />
             {children}
             <Toaster />
           </ThemeProvider>

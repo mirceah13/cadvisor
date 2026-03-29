@@ -46,11 +46,12 @@ class ProjectResponse(BaseModel):
 @router.get("")
 async def list_projects(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List all projects for the current user's organization"""
+    limit = min(limit, 100)  # cap at 100
     # Get user's organization through OrgMember
     org_member = db.query(OrgMember).filter(
         OrgMember.user_id == current_user.id

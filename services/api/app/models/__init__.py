@@ -117,6 +117,14 @@ class User(Base, TimestampMixin):
     is_superuser = Column(Boolean, default=False, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Email verification
+    email_verify_token = Column(String(255), unique=True, nullable=True, index=True)
+    email_verify_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Password reset
+    password_reset_token = Column(String(255), unique=True, nullable=True, index=True)
+    password_reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     
     # Relationships
     org_memberships = relationship("OrgMember", back_populates="user", cascade="all, delete-orphan")

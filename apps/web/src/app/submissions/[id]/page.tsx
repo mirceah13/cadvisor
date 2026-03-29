@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
-import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { Button } from '@/components/ui/button'
@@ -21,6 +20,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { FileDetailsTab } from '@/components/file-details-tab'
 import { AnalysisProgress } from '@/components/analysis-progress'
@@ -83,7 +85,6 @@ interface Finding {
 export default function SubmissionDetailPage() {
   const params = useParams()
   const router = useLoadingRouter()
-  const { accessToken } = useAuth()
   const { toast } = useToast()
   
   const [submission, setSubmission] = useState<Submission | null>(null)
@@ -93,7 +94,7 @@ export default function SubmissionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const [lastAnalysisStatus, setLastAnalysisStatus] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [runningAnalysisId, setRunningAnalysisId] = useState<string | null>(null)
@@ -106,13 +107,22 @@ export default function SubmissionDetailPage() {
     startTime?: number
     metadata?: any
   }[]>([])
+  const uploadedFilesStateRef = useRef<typeof uploadedFilesState>([])
   const [isParsingFiles, setIsParsingFiles] = useState(false)
-  const [fileParsingInterval, setFileParsingInterval] = useState<NodeJS.Timeout | null>(null)
+  const fileParsingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const [timerTick, setTimerTick] = useState(0)
   const [fileToDelete, setFileToDelete] = useState<{ id: string; filename: string } | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [showDeleteSubmissionDialog, setShowDeleteSubmissionDialog] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', description: '' })
+  const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('files')
   const [detailsFileId, setDetailsFileId] = useState<string | null>(null)
+
+  // Keep ref in sync with latest uploadedFilesState every render
+  useEffect(() => {
+    uploadedFilesStateRef.current = uploadedFilesState
+  })
 
   useEffect(() => {
     fetchSubmission()
@@ -121,22 +131,22 @@ export default function SubmissionDetailPage() {
     
     // Cleanup polling on unmount
     return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval)
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
       }
-      if (fileParsingInterval) {
-        clearInterval(fileParsingInterval)
+      if (fileParsingIntervalRef.current) {
+        clearInterval(fileParsingIntervalRef.current)
       }
     }
-  }, [params.id, accessToken])
+  }, [params.id])
 
   // Auto-start polling when uploadedFilesState has files and we're marked as parsing
   useEffect(() => {
-    if (isParsingFiles && uploadedFilesState.length > 0 && !fileParsingInterval) {
+    if (isParsingFiles && uploadedFilesState.length > 0 && !fileParsingIntervalRef.current) {
       console.log('[Effect] Auto-starting polling for', uploadedFilesState.length, 'files')
       checkFileParsingStatus()
       const interval = setInterval(checkFileParsingStatus, 2000)
-      setFileParsingInterval(interval)
+      fileParsingIntervalRef.current = interval
     }
   }, [uploadedFilesState.length, isParsingFiles])
 
@@ -151,13 +161,10 @@ export default function SubmissionDetailPage() {
   }, [isParsingFiles, uploadedFilesState.length])
 
   const fetchSubmission = async () => {
-    if (!accessToken) return
-
     try {
-      const response: any = await apiClient.get(`/submissions/${params.id}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
-      setSubmission(response.data || response)
+      const data = await apiClient.get<Submission>(`/submissions/${params.id}`)
+      setSubmission(data)
+      setEditForm({ name: data.name, description: data.description ?? '' })
     } catch (err: any) {
       console.error('Failed to fetch submission:', err)
       setError(err.response?.data?.detail || 'Failed to load submission')
@@ -167,15 +174,9 @@ export default function SubmissionDetailPage() {
   }
 
   const fetchFiles = async () => {
-    if (!accessToken) return
-
     try {
       console.log('[Fetch] Fetching files for submission:', params.id)
-      const response: any = await apiClient.get('/files', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: { submission_id: params.id }
-      })
-      const fetchedFiles = response.data || response || []
+      const fetchedFiles = (await apiClient.get<any[]>(`/files?submission_id=${params.id}`)) || []
       console.log('[Fetch] Got', fetchedFiles.length, 'files')
       setFiles(fetchedFiles)
       
@@ -226,14 +227,8 @@ export default function SubmissionDetailPage() {
   }
 
   const fetchAnalysisRuns = async () => {
-    if (!accessToken) return
-
     try {
-      const response: any = await apiClient.get(
-        `/analysis/submissions/${params.id}/runs`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      )
-      const runs = response.data || response || []
+      const runs = (await apiClient.get<AnalysisRun[]>(`/analysis/submissions/${params.id}/runs`)) || []
       
       // Only update state if data has actually changed
       const hasChanged = JSON.stringify(runs) !== JSON.stringify(analysisRuns)
@@ -295,51 +290,36 @@ export default function SubmissionDetailPage() {
 
   const startPolling = () => {
     // Don't start if already polling
-    if (pollingInterval) return
+    if (pollingIntervalRef.current) return
     
     const interval = setInterval(() => {
       fetchAnalysisRuns()
     }, 5000) // Poll every 5 seconds
     
-    setPollingInterval(interval)
+    pollingIntervalRef.current = interval
   }
 
   const stopPolling = () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
-      setPollingInterval(null)
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
     }
   }
 
   const fetchFindings = async (analysisRunId?: string) => {
-    if (!accessToken) return
-
     try {
-      const queryParams: any = { submission_id: params.id }
-      if (analysisRunId) {
-        queryParams.analysis_run_id = analysisRunId
-      }
-
-      const response: any = await apiClient.get(`/analysis/submissions/${params.id}/findings`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: queryParams
-      })
-      setFindings(response.data || response || [])
+      const qs = analysisRunId ? `?analysis_run_id=${analysisRunId}` : ''
+      const data = (await apiClient.get<Finding[]>(`/analysis/submissions/${params.id}/findings${qs}`)) || []
+      setFindings(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to fetch findings:', err)
     }
   }
 
   const handleStartAnalysis = async () => {
-    if (!accessToken) return
-
     setAnalyzing(true)
     try {
-      await apiClient.post(
-        '/analysis/start',
-        { submission_id: params.id },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      )
+      await apiClient.post('/analysis/start', { submission_id: params.id })
 
       toast({
         title: "Analysis Started",
@@ -365,12 +345,8 @@ export default function SubmissionDetailPage() {
   }
 
   const retryFileProcessing = async (fileId: string) => {
-    if (!accessToken) return
-
     try {
-      await apiClient.post(`/files/${fileId}/retry`, {}, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
+      await apiClient.post(`/files/${fileId}/retry`, {})
       
       toast({
         title: "Processing Restarted",
@@ -385,10 +361,10 @@ export default function SubmissionDetailPage() {
       ))
       
       // Restart polling if not already running
-      if (!fileParsingInterval) {
+      if (!fileParsingIntervalRef.current) {
         checkFileParsingStatus()
         const interval = setInterval(checkFileParsingStatus, 2000)
-        setFileParsingInterval(interval)
+        fileParsingIntervalRef.current = interval
         setIsParsingFiles(true)
       }
     } catch (error: any) {
@@ -402,15 +378,15 @@ export default function SubmissionDetailPage() {
   }
 
   const checkFileParsingStatus = async () => {
-    if (!accessToken || uploadedFilesState.length === 0) {
-      console.log('[Progress] Skipping check - accessToken:', !!accessToken, ', files:', uploadedFilesState.length)
+    if (uploadedFilesStateRef.current.length === 0) {
+      console.log('[Progress] Skipping check - files:', uploadedFilesStateRef.current.length)
       return
     }
 
     try {
       console.log('[Progress] ============ POLLING CYCLE START ============')
-      console.log('[Progress] Checking', uploadedFilesState.length, 'files')
-      console.log('[Progress] Current state:', uploadedFilesState.map(f => ({ 
+      console.log('[Progress] Checking', uploadedFilesStateRef.current.length, 'files')
+      console.log('[Progress] Current state:', uploadedFilesStateRef.current.map(f => ({ 
         name: f.name, 
         status: f.status, 
         startTime: f.startTime,
@@ -418,10 +394,7 @@ export default function SubmissionDetailPage() {
       })))
       
       // Use the processing-status endpoint for better performance
-      const response: any = await apiClient.get(`/submissions/${params.id}/processing-status`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
-      const data = response.data || response
+      const data = await apiClient.get<any>(`/submissions/${params.id}/processing-status`)
       
       console.log('[Progress] API Response:', {
         totalFiles: data.files?.length,
@@ -439,7 +412,7 @@ export default function SubmissionDetailPage() {
         return
       }
 
-      const updatedFiles = [...uploadedFilesState]
+      const updatedFiles = [...uploadedFilesStateRef.current]
       let allDone = true
       let anyUpdated = false
 
@@ -552,9 +525,9 @@ export default function SubmissionDetailPage() {
       // Stop polling if all files are processed
       if (allDone) {
         console.log('[Progress] ✅ All files done, stopping polling')
-        if (fileParsingInterval) {
-          clearInterval(fileParsingInterval)
-          setFileParsingInterval(null)
+        if (fileParsingIntervalRef.current) {
+          clearInterval(fileParsingIntervalRef.current)
+          fileParsingIntervalRef.current = null
         }
         setIsParsingFiles(false)
 
@@ -594,7 +567,7 @@ export default function SubmissionDetailPage() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files
-    if (!selectedFiles || selectedFiles.length === 0 || !accessToken) return
+    if (!selectedFiles || selectedFiles.length === 0) return
 
     console.log('[Upload] Starting upload of', selectedFiles.length, 'files')
     setUploading(true)
@@ -642,16 +615,11 @@ export default function SubmissionDetailPage() {
             ))
           }, 200)
           
-          const response: any = await apiClient.post('/files/upload', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              Authorization: `Bearer ${accessToken}`
-            }
+          const uploadedFile = await apiClient.post<any>('/files/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
           })
           
           clearInterval(progressInterval)
-          
-          const uploadedFile = response.data || response
           console.log('[Upload] File uploaded successfully, ID:', uploadedFile.id)
           
           fileEntry.id = uploadedFile.id
@@ -697,16 +665,30 @@ export default function SubmissionDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!accessToken || !submission) return
-    if (!confirm('Are you sure you want to delete this submission?')) return
-
+    if (!submission) return
     try {
-      await apiClient.delete(`/submissions/${submission.id}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
+      await apiClient.delete(`/submissions/${submission.id}`)
       router.push('/submissions')
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to delete submission')
+      toast({ variant: 'destructive', title: 'Delete Failed', description: err.response?.data?.detail || 'Failed to delete submission' })
+    }
+  }
+
+  const handleUpdateSubmission = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!submission) return
+    setSaving(true)
+    try {
+      const updated = await apiClient.put<Submission>(`/submissions/${submission.id}`, {
+        name: editForm.name,
+        description: editForm.description || undefined,
+      })
+      setSubmission(updated)
+      toast({ title: 'Saved', description: 'Submission updated successfully.' })
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.response?.data?.detail || 'Failed to update submission.' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -799,19 +781,7 @@ export default function SubmissionDetailPage() {
                   Back
                 </Link>
               </Button>
-              {!analyzing && files.length > 0 && !isParsingFiles && (
-                <Button onClick={handleStartAnalysis}>
-                  <Play className="mr-2 h-4 w-4" />
-                  Run Analysis
-                </Button>
-              )}
-              {(analyzing || isParsingFiles) && (
-                <Button disabled variant="outline">
-                  <Clock className="mr-2 h-4 w-4 animate-spin" />
-                  {isParsingFiles ? 'Processing...' : 'Analyzing...'}
-                </Button>
-              )}
-              <Button variant="ghost" size="icon" onClick={handleDelete}>
+              <Button variant="ghost" size="icon" onClick={() => setShowDeleteSubmissionDialog(true)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
@@ -836,7 +806,7 @@ export default function SubmissionDetailPage() {
           </span>
         </div>
 
-        {/* Stats Cards */}}
+        {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -904,7 +874,7 @@ export default function SubmissionDetailPage() {
                 className="flex flex-1 items-center justify-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-colors"
               >
                 <BarChart3 className="h-4 w-4" />
-                File Details
+                CAD Metadata
               </TabsTrigger>
               <TabsTrigger
                 value="analysis"
@@ -914,6 +884,9 @@ export default function SubmissionDetailPage() {
                 Analysis
                 {analysisRuns.length > 0 && (
                   <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">{analysisRuns.length}</span>
+                )}
+                {findings.length > 0 && (
+                  <span className="rounded-full bg-destructive/10 text-destructive px-1.5 py-0.5 text-xs font-semibold tabular-nums">{findings.length}</span>
                 )}
               </TabsTrigger>
               <TabsTrigger
@@ -1514,29 +1487,73 @@ export default function SubmissionDetailPage() {
           <TabsContent value="settings" className="space-y-4">
             <Card className="border-2">
               <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-muted-foreground" />
-                  Submission Settings
-                </CardTitle>
-                <CardDescription>
-                  Manage submission details, permissions, and preferences
-                </CardDescription>
+                <CardTitle>Edit Submission</CardTitle>
+                <CardDescription>Update the name and description for this submission</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
-                <div className="text-center py-16">
-                  <div className="p-4 bg-muted rounded-full w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-                    <Settings className="h-12 w-12 text-muted-foreground" />
+                <form onSubmit={handleUpdateSubmission} className="space-y-4 max-w-lg">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">Name</Label>
+                    <Input
+                      id="edit-name"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
+                      required
+                    />
                   </div>
-                  <h3 className="text-xl font-semibold mb-2">Settings Coming Soon</h3>
-                  <p className="text-muted-foreground max-w-md mx-auto">
-                    Advanced settings and configuration options will be available here
-                  </p>
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-description">Description</Label>
+                    <Textarea
+                      id="edit-description"
+                      value={editForm.description}
+                      onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                      rows={3}
+                      placeholder="Optional description..."
+                    />
+                  </div>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card className="border-destructive/30">
+              <CardHeader>
+                <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                <CardDescription>Permanently delete this submission and all associated files and analysis results</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="destructive" onClick={() => setShowDeleteSubmissionDialog(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Submission
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Delete Submission Confirmation Dialog */}
+      <AlertDialog open={showDeleteSubmissionDialog} onOpenChange={setShowDeleteSubmissionDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Submission</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete <strong>{submission?.name}</strong>? This will also delete all uploaded files and analysis results. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+            >
+              Delete Submission
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete File Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

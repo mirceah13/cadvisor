@@ -285,3 +285,76 @@ export const projectsApi = {
   getFindingsSummary: (id: string) => api.get<ProjectFindingsSummary>(`/projects/${id}/findings-summary`),
 }
 
+// Types for submissions
+export interface FindingsSummary {
+  total: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+}
+
+export interface SubmissionListItem {
+  id: string
+  name: string
+  description?: string | null
+  status: string
+  project_id: string
+  project_name?: string | null
+  created_at: string
+  updated_at: string
+  files_count: number
+  findings_summary?: FindingsSummary | null
+}
+
+export interface SubmissionDetail extends SubmissionListItem {
+  building_type?: string | null
+  profile?: any | null
+}
+
+export interface SubmissionAnalysisRun {
+  id: string
+  submission_id: string
+  status: string
+  findings_count?: number
+  checks_completed: string[]
+  error_message?: string
+  created_at: string
+}
+
+export interface SubmissionFinding {
+  id: string
+  severity: string
+  category: string
+  title: string
+  description: string
+  status: string
+  location?: string
+  recommendation?: string
+  metadata?: any
+  created_at: string
+}
+
+// Submissions API
+export const submissionsApi = {
+  list: (params?: { project_id?: string; status?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString()
+      : ''
+    return api.get<SubmissionListItem[]>(`/submissions${qs}`)
+  },
+  get: (id: string) => api.get<SubmissionDetail>(`/submissions/${id}`),
+  create: (data: { name: string; description?: string; project_id: string }) =>
+    api.post<SubmissionDetail>('/submissions', data),
+  update: (id: string, data: { name?: string; description?: string; status?: string }) =>
+    api.put<SubmissionDetail>(`/submissions/${id}`, data),
+  remove: (id: string) => api.delete(`/submissions/${id}`),
+  getProcessingStatus: (id: string) => api.get<any>(`/submissions/${id}/processing-status`),
+  getAnalysisRuns: (id: string) => api.get<SubmissionAnalysisRun[]>(`/analysis/submissions/${id}/runs`),
+  getFindings: (id: string, runId?: string) => {
+    const qs = runId ? `?analysis_run_id=${runId}` : ''
+    return api.get<SubmissionFinding[]>(`/analysis/submissions/${id}/findings${qs}`)
+  },
+}
+
+

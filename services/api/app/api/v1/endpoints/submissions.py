@@ -208,7 +208,7 @@ def get_processing_status(
             "processing_started_at": parsed_metadata.get("processing_started_at"),
             "processing_completed_at": parsed_metadata.get("processing_completed_at"),
             "task_id": parsed_metadata.get("processing_task_id"),
-            "error": parsed_metadata.get("processing_errorerror"),
+            "error": parsed_metadata.get("processing_error"),
         })
     
     # Overall submission status

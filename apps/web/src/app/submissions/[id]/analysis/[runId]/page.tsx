@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
-import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { Button } from '@/components/ui/button'
@@ -39,8 +38,7 @@ interface Finding {
 export default function AnalysisDetailPage() {
   const params = useParams()
   const router = useLoadingRouter()
-  const { accessToken } = useAuth()
-  
+
   const [analysisRun, setAnalysisRun] = useState<AnalysisRun | null>(null)
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,16 +47,12 @@ export default function AnalysisDetailPage() {
   useEffect(() => {
     fetchAnalysisRun()
     fetchFindings()
-  }, [params.runId, accessToken])
+  }, [params.runId])
 
   const fetchAnalysisRun = async () => {
-    if (!accessToken) return
-
     try {
-      const response: any = await apiClient.get(`/analysis/runs/${params.runId}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
-      setAnalysisRun(response.data || response)
+      const data = await apiClient.get<AnalysisRun>(`/analysis/runs/${params.runId}`)
+      setAnalysisRun(data)
     } catch (err: any) {
       console.error('Failed to fetch analysis run:', err)
       setError(err.response?.data?.detail || 'Failed to load analysis')
@@ -68,14 +62,11 @@ export default function AnalysisDetailPage() {
   }
 
   const fetchFindings = async () => {
-    if (!accessToken) return
-
     try {
-      const response: any = await apiClient.get(`/analysis/submissions/${params.id}/findings`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: { analysis_run_id: params.runId }
-      })
-      setFindings(response.data || response || [])
+      const data = await apiClient.get<Finding[]>(
+        `/analysis/submissions/${params.id}/findings?analysis_run_id=${params.runId}`
+      )
+      setFindings(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to fetch findings:', err)
     }
@@ -111,7 +102,7 @@ export default function AnalysisDetailPage() {
     return (
       <>
         <DashboardNav />
-        <div className="flex-1 p-8 pt-6 container">
+        <div className="flex-1 p-8 pt-6 container max-w-7xl">
           <Skeleton className="h-10 w-64 mb-6" />
           <Skeleton className="h-96" />
         </div>
@@ -123,10 +114,10 @@ export default function AnalysisDetailPage() {
     return (
       <>
         <DashboardNav />
-        <div className="flex-1 p-8 pt-6 container">
-          <Card className="border-red-200">
+        <div className="flex-1 p-8 pt-6 container max-w-7xl">
+          <Card className="border-destructive/30">
             <CardHeader>
-              <CardTitle className="text-red-600">Error</CardTitle>
+              <CardTitle className="text-destructive">Error</CardTitle>
             </CardHeader>
             <CardContent>
               <p>{error || 'Analysis run not found'}</p>
@@ -149,7 +140,7 @@ export default function AnalysisDetailPage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 p-8 pt-6 container">
+      <div className="flex-1 p-8 pt-6 container max-w-7xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -262,11 +253,11 @@ export default function AnalysisDetailPage() {
               </div>
 
               {analysisRun.error_message && (
-                <div className="p-4 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200">
-                  <h4 className="text-sm font-semibold text-red-900 dark:text-red-100 mb-1">
+                <div className="p-4 bg-destructive/5 rounded-lg border border-destructive/30">
+                  <h4 className="text-sm font-semibold text-destructive mb-1">
                     Error
                   </h4>
-                  <p className="text-sm text-red-700 dark:text-red-300">
+                  <p className="text-sm text-muted-foreground">
                     {analysisRun.error_message}
                   </p>
                 </div>
@@ -279,9 +270,9 @@ export default function AnalysisDetailPage() {
         {findings.length > 0 ? (
           <>
             {criticalCount > 0 && (
-              <Card className="mb-6 border-red-200">
+              <Card className="mb-6 border-destructive/30">
                 <CardHeader>
-                  <CardTitle className="text-red-600 flex items-center gap-2">
+                  <CardTitle className="text-destructive flex items-center gap-2">
                     <XCircle className="h-5 w-5" />
                     Critical Issues ({criticalCount})
                   </CardTitle>
@@ -292,7 +283,7 @@ export default function AnalysisDetailPage() {
                 <CardContent>
                   <div className="space-y-4">
                     {findings.filter(f => f.severity === 'critical').map((finding) => (
-                      <div key={finding.id} className="p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950">
+                      <div key={finding.id} className="p-4 rounded-lg border border-destructive/30 bg-destructive/5">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
                             {getSeverityIcon(finding.severity)}

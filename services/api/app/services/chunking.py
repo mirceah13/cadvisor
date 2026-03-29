@@ -224,22 +224,24 @@ class ChunkingStrategy:
     
     @staticmethod
     def code_standards() -> ChunkingService:
-        """Strategy for building codes and standards.
-        Small chunks keep individual regulatory articles/clauses intact.
-        With ~566 chars/page for a building code, 600-char chunks ≈ 1 chunk/page.
+        """Strategy for building codes, fire-safety normatives, legal standards.
+
+        Larger chunks keep individual regulatory articles/clauses intact.
+        A typical article in a Romanian normative spans 1 000-2 000 characters;
+        600-char chunks were splitting them mid-sentence.
         """
         return ChunkingService(
-            chunk_size=600,
-            chunk_overlap=100,
-            min_chunk_size=100
+            chunk_size=1500,
+            chunk_overlap=300,
+            min_chunk_size=150
         )
 
     @staticmethod
     def general_documents() -> ChunkingService:
         """Strategy for general documents"""
         return ChunkingService(
-            chunk_size=800,
-            chunk_overlap=150,
+            chunk_size=1200,
+            chunk_overlap=250,
             min_chunk_size=100
         )
 
@@ -247,7 +249,7 @@ class ChunkingStrategy:
     def technical_specs() -> ChunkingService:
         """Strategy for technical specifications"""
         return ChunkingService(
-            chunk_size=600,
-            chunk_overlap=100,
-            min_chunk_size=80
+            chunk_size=1000,
+            chunk_overlap=200,
+            min_chunk_size=100
         )

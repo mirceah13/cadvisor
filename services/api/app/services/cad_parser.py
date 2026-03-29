@@ -1962,25 +1962,47 @@ class DOCXParser:
     """DOCX document extraction"""
     
     def parse(self, file_path: str) -> Dict[str, Any]:
-        """Extract text from DOCX"""
+        """Extract text from DOCX including paragraphs and table content."""
         try:
             import docx
-            
+
             doc = docx.Document(file_path)
-            
-            # Extract full text from all paragraphs
-            paragraphs = []
+            segments = []
+
+            # --- Paragraphs ---
             for para in doc.paragraphs:
-                if para.text.strip():
-                    paragraphs.append(para.text)
-            
-            combined_text = "\n\n".join(paragraphs)
-            
+                text = para.text.strip()
+                if text:
+                    segments.append(text)
+
+            # --- Tables ---
+            # python-docx duplicates merged cells; track by internal element id.
+            for table in doc.tables:
+                table_lines = []
+                for row in table.rows:
+                    seen_cell_ids: set = set()
+                    cell_texts = []
+                    for cell in row.cells:
+                        cell_id = id(cell._tc)
+                        if cell_id in seen_cell_ids:
+                            continue
+                        seen_cell_ids.add(cell_id)
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            cell_texts.append(cell_text)
+                    if cell_texts:
+                        table_lines.append(" | ".join(cell_texts))
+                if table_lines:
+                    segments.append("\n".join(table_lines))
+
+            combined_text = "\n\n".join(segments)
+
             return {
                 "type": "docx",
                 "paragraph_count": len(doc.paragraphs),
+                "table_count": len(doc.tables),
                 "text": combined_text,
-                "char_count": len(combined_text)
+                "char_count": len(combined_text),
             }
         except Exception as e:
             logger.error(f"Error parsing DOCX: {e}")

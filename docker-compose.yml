@@ -130,6 +130,14 @@ services:
       - APS_CLIENT_SECRET=${APS_CLIENT_SECRET}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@cadvisor.local}
+      - SMTP_TLS=${SMTP_TLS:-false}
+      - SMTP_ENABLED=${SMTP_ENABLED:-true}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     volumes:
       - ./services/api:/app
       - api_uploads:/app/uploads
@@ -260,6 +268,16 @@ services:
       - redis
       - celery-worker
     command: celery -A app.worker.celery_app beat --loglevel=info
+    networks:
+      - cadvisor-network
+
+  # Mailpit — local SMTP catch-all (dev only)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: cadvisor-mailpit
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI → http://localhost:8025
     networks:
       - cadvisor-network
 

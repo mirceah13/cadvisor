@@ -139,12 +139,14 @@ class Settings(BaseSettings):
     DEFAULT_TRIAL_DAYS: int = Field(default=14, env="DEFAULT_TRIAL_DAYS")
     
     # Email
-    ENABLE_EMAIL_VERIFICATION: bool = Field(default=False, env="ENABLE_EMAIL_VERIFICATION")
-    SMTP_HOST: Optional[str] = Field(default=None, env="SMTP_HOST")
-    SMTP_PORT: int = Field(default=587, env="SMTP_PORT")
+    SMTP_ENABLED: bool = Field(default=False, env="SMTP_ENABLED")
+    SMTP_HOST: str = Field(default="mailpit", env="SMTP_HOST")
+    SMTP_PORT: int = Field(default=1025, env="SMTP_PORT")
     SMTP_USER: Optional[str] = Field(default=None, env="SMTP_USER")
     SMTP_PASSWORD: Optional[str] = Field(default=None, env="SMTP_PASSWORD")
-    SMTP_FROM_EMAIL: str = Field(default="noreply@buildguard.example", env="SMTP_FROM_EMAIL")
+    SMTP_FROM: str = Field(default="noreply@cadvisor.local", env="SMTP_FROM")
+    SMTP_TLS: bool = Field(default=False, env="SMTP_TLS")
+    FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
     
     # Data retention
     SOFT_DELETE_RETENTION_DAYS: int = Field(default=90, env="SOFT_DELETE_RETENTION_DAYS")

@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from slugify import slugify
@@ -17,6 +17,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.email import (
+    send_password_changed_email,
+    send_password_reset_email,
+    send_verification_email,
+)
 from app.core.security import (
     blacklist_token,
     create_access_token,
@@ -192,7 +197,7 @@ def _user_payload(user: User, org_member: OrgMember) -> dict:
 # ---------------------------------------------------------------------------
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(f"{settings.RATE_LIMIT_AUTH_PER_MINUTE}/minute")
-async def register(http_request: Request, request: SignupRequest, db: Session = Depends(get_db)):
+async def register(http_request: Request, request: SignupRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Create a new user account with organization."""
     if db.query(User).filter(User.email == request.email).first():
         raise HTTPException(
@@ -249,6 +254,7 @@ async def register(http_request: Request, request: SignupRequest, db: Session = 
     logger.info(f"User registered: {user.email}, org: {organization.name}")
     if settings.DEBUG:
         logger.info(f"[DEV] Email verification token for {user.email}: {verify_token}")
+    background_tasks.add_task(send_verification_email, user.email, verify_token)
 
     data = _token_data(user, organization.id)
     return TokenResponse(
@@ -376,7 +382,7 @@ async def verify_email(request: EmailVerifySchema, db: Session = Depends(get_db)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
-async def forgot_password(request: PasswordResetRequestSchema, db: Session = Depends(get_db)):
+async def forgot_password(request: PasswordResetRequestSchema, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Request a password-reset link. Always 204 to avoid user enumeration."""
     user = db.query(User).filter(User.email == request.email).first()
     if user and user.is_active:
@@ -386,7 +392,7 @@ async def forgot_password(request: PasswordResetRequestSchema, db: Session = Dep
         db.commit()
         if settings.DEBUG:
             logger.info(f"[DEV] Password reset token for {user.email}: {reset_token}")
-        # TODO production: send email with reset link
+        background_tasks.add_task(send_password_reset_email, user.email, reset_token)
 
 
 @router.post("/reset-password")
@@ -408,6 +414,7 @@ async def reset_password(request: PasswordResetConfirmSchema, db: Session = Depe
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(
     request: PasswordChangeRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -417,6 +424,7 @@ async def change_password(
     current_user.password_hash = get_password_hash(request.new_password)
     db.commit()
     logger.info(f"Password changed for: {current_user.email}")
+    background_tasks.add_task(send_password_changed_email, current_user.email)
 
 
 @router.get("/me")

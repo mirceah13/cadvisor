@@ -3,30 +3,78 @@
 import { DashboardOverview } from '@/components/dashboard/overview'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { FindingSeverityChart } from '@/components/dashboard/finding-severity-chart'
+import { SubmissionTrendChart } from '@/components/dashboard/submission-trend-chart'
+import { SystemStatus } from '@/components/dashboard/system-status'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, Upload, BarChart3, FolderPlus, Database } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingLink } from '@/components/loading-link'
 import { triggerLoading } from '@/components/global-loading-spinner'
-import { useEffect, useState } from 'react'
-import { dashboardApi, DashboardStats } from '@/lib/api-client'
+import { useEffect, useState, useCallback, useRef, Component, ReactNode } from 'react'
+import { dashboardApi, DashboardStats, TrendsData } from '@/lib/api-client'
+
+// ── Simple error boundary ────────────────────────────────────
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">
+          Something went wrong loading this section.
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ── Date range options ────────────────────────────────────────
+type Range = 7 | 30 | 90
+const RANGES: { label: string; value: Range }[] = [
+  { label: '7d', value: 7 },
+  { label: '30d', value: 30 },
+  { label: '90d', value: 90 },
+]
+
+const STATS_POLL_MS = 30_000
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [trends, setTrends] = useState<TrendsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [range, setRange] = useState<Range>(30)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    try {
+      setError(null)
+      const [statsData, trendsData] = await Promise.all([
+        dashboardApi.getStats(),
+        dashboardApi.getTrends(range),
+      ])
+      setStats(statsData)
+      setTrends(trendsData)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || 'Failed to load dashboard statistics')
+    } finally {
+      setLoading(false)
+    }
+  }, [range])
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const data = await dashboardApi.getStats()
-        setStats(data)
-      } catch (error) {
-        console.error('Failed to fetch stats for chart:', error)
-      }
+    setLoading(true)
+    fetchAll()
+
+    // Auto-refresh stats every 30 s
+    intervalRef.current = setInterval(fetchAll, STATS_POLL_MS)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
     }
-    fetchStats()
-  }, [])
+  }, [fetchAll])
 
   return (
     <>
@@ -37,6 +85,22 @@ export default function DashboardPage() {
           description="CAD compliance analysis for your architectural projects"
           actions={
             <>
+              {/* Date range selector */}
+              <div className="flex items-center gap-1 rounded-md border bg-muted/40 p-1">
+                {RANGES.map(({ label, value }) => (
+                  <button
+                    key={value}
+                    onClick={() => setRange(value)}
+                    className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                      range === value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <Button variant="outline" size="sm" asChild onClick={() => triggerLoading()}>
                 <LoadingLink href="/projects">
                   <FolderPlus className="mr-2 h-4 w-4" />
@@ -53,21 +117,37 @@ export default function DashboardPage() {
           }
         />
 
-        <DashboardOverview />
+        <ErrorBoundary>
+          <DashboardOverview
+            stats={stats}
+            trends={trends}
+            loading={loading}
+            error={error}
+            onRetry={fetchAll}
+          />
+        </ErrorBoundary>
 
         <div className="grid gap-6 lg:grid-cols-7 items-start">
           <div className="lg:col-span-4">
-            <RecentActivity />
+            <ErrorBoundary>
+              <RecentActivity />
+            </ErrorBoundary>
           </div>
           <div className="lg:col-span-3 space-y-6">
-            {stats && (stats.findings.critical + stats.findings.high + stats.findings.medium + stats.findings.low) > 0 && (
-              <FindingSeverityChart
-                critical={stats.findings.critical}
-                high={stats.findings.high}
-                medium={stats.findings.medium}
-                low={stats.findings.low}
-              />
-            )}
+            <ErrorBoundary>
+              {stats && (
+                <FindingSeverityChart
+                  critical={stats.findings.critical}
+                  high={stats.findings.high}
+                  medium={stats.findings.medium}
+                  low={stats.findings.low}
+                />
+              )}
+            </ErrorBoundary>
+
+            <ErrorBoundary>
+              <SubmissionTrendChart days={range} />
+            </ErrorBoundary>
 
             {/* Quick Actions */}
             <Card>
@@ -100,23 +180,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* System Status */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">System Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0">
-                {['API Service', 'AI Analysis', 'File Storage'].map((service) => (
-                  <div key={service} className="flex items-center justify-between py-1">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                      <span className="text-sm text-muted-foreground">{service}</span>
-                    </div>
-                    <span className="text-xs font-medium text-green-600 dark:text-green-400">Operational</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <ErrorBoundary>
+              <SystemStatus />
+            </ErrorBoundary>
           </div>
         </div>
       </div>

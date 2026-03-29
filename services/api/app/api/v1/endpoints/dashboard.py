@@ -1,15 +1,17 @@
 """
 Dashboard endpoints - Aggregate statistics and recent activity
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_, case
-from typing import List
-from uuid import UUID
-from datetime import datetime, timedelta
+from sqlalchemy import func, desc, and_, text
+from typing import List, Optional
+from datetime import datetime, timedelta, date
 from pydantic import BaseModel
+import time as _time
+import httpx
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models import Project, Submission, User, OrgMember, File, Finding, AnalysisRun
 from app.core.security import get_current_user
 
@@ -157,17 +159,19 @@ async def get_dashboard_stats(
                     )
                 ).scalar() or 0
                 
+                # 'warning' is grouped with 'medium' as they represent similar urgency
                 medium_findings = db.query(func.count(Finding.id)).filter(
                     and_(
                         Finding.analysis_run_id.in_(analysis_run_ids),
-                        Finding.severity == 'medium'
+                        Finding.severity.in_(['medium', 'warning'])
                     )
                 ).scalar() or 0
                 
+                # 'info' is grouped with 'low' as informational findings
                 low_findings = db.query(func.count(Finding.id)).filter(
                     and_(
                         Finding.analysis_run_id.in_(analysis_run_ids),
-                        Finding.severity == 'low'
+                        Finding.severity.in_(['low', 'info'])
                     )
                 ).scalar() or 0
                 
@@ -278,40 +282,47 @@ async def get_recent_activity(
     ).order_by(desc(Submission.created_at)).limit(limit).all()
     
     for submission, project in recent_submissions:
-        # Determine activity type and status based on submission status
-        if submission.status in ['reviewed', 'approved']:
+        # Check actual AnalysisRun records — more reliable than submission.status alone
+        # (handles cases where status wasn't updated but analysis ran, e.g. seeded data)
+        latest_run = db.query(AnalysisRun).filter(
+            AnalysisRun.submission_id == submission.id
+        ).order_by(desc(AnalysisRun.created_at)).first()
+
+        if latest_run and latest_run.status == 'completed':
             activity_type = 'analysis_completed'
             title = 'Analysis completed'
             activity_status = 'success'
-            
-            # Count findings for this submission through analysis runs
-            finding_count = db.query(func.count(Finding.id)).join(
-                AnalysisRun, Finding.analysis_run_id == AnalysisRun.id
-            ).filter(
-                AnalysisRun.submission_id == submission.id
+            finding_count = db.query(func.count(Finding.id)).filter(
+                Finding.analysis_run_id == latest_run.id
             ).scalar() or 0
-            
             description = f'{project.name} - {submission.name or "Submission"} analyzed with {finding_count} findings'
-        elif submission.status == 'analyzing':
+        elif latest_run and latest_run.status == 'running':
             activity_type = 'analysis_in_progress'
             title = 'Analysis in progress'
-            activity_status = 'info'
+            activity_status = 'warning'
             description = f'{project.name} - {submission.name or "Submission"} is being analyzed'
+        elif latest_run and latest_run.status == 'failed':
+            activity_type = 'analysis_failed'
+            title = 'Analysis failed'
+            activity_status = 'error'
+            description = f'{project.name} - {submission.name or "Submission"} analysis failed'
         elif submission.status == 'rejected':
             activity_type = 'analysis_failed'
             title = 'Submission rejected'
             activity_status = 'error'
             description = f'{project.name} - {submission.name or "Submission"} was rejected'
-        else:  # draft, submitted
+        elif submission.status == 'analyzing':
+            activity_type = 'analysis_in_progress'
+            title = 'Analysis in progress'
+            activity_status = 'warning'
+            description = f'{project.name} - {submission.name or "Submission"} is being analyzed'
+        else:  # draft, submitted — no analysis run yet
             activity_type = 'submission_created'
             title = 'New submission uploaded'
             activity_status = 'info'
-            
-            # Count files for this submission
             file_count = db.query(func.count(File.id)).filter(
                 File.submission_id == submission.id
             ).scalar() or 0
-            
             description = f'{project.name} - {submission.name or "Submission"} with {file_count} files'
         
         activities.append(ActivityItem(
@@ -328,3 +339,231 @@ async def get_recent_activity(
     activities.sort(key=lambda x: x.timestamp, reverse=True)
     
     return RecentActivityResponse(activities=activities[:limit])
+
+
+# ─────────────────────────────────────────────────────────────
+# Health check
+# ─────────────────────────────────────────────────────────────
+
+class ServiceHealth(BaseModel):
+    name: str
+    status: str  # "healthy" | "degraded" | "unavailable"
+    latency_ms: Optional[float] = None
+    message: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    services: List[ServiceHealth]
+    overall: str  # "healthy" | "degraded" | "unavailable"
+
+
+@router.get("/health", response_model=HealthResponse)
+async def get_dashboard_health(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the health status of each system service."""
+    services: List[ServiceHealth] = []
+
+    # 1. API (always reachable since we are responding)
+    services.append(ServiceHealth(name="API Service", status="healthy", latency_ms=0.0))
+
+    # 2. Database
+    try:
+        t0 = _time.monotonic()
+        db.execute(text("SELECT 1"))
+        latency = round((_time.monotonic() - t0) * 1000, 1)
+        services.append(ServiceHealth(name="Database", status="healthy", latency_ms=latency))
+    except Exception as exc:
+        services.append(ServiceHealth(name="Database", status="unavailable", message=str(exc)[:120]))
+
+    # 3. AI Analysis service
+    try:
+        t0 = _time.monotonic()
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{settings.AI_SERVICE_BASE_URL}/health")
+        latency = round((_time.monotonic() - t0) * 1000, 1)
+        svc_status = "healthy" if resp.status_code == 200 else "degraded"
+        msg = None if resp.status_code == 200 else f"HTTP {resp.status_code}"
+        services.append(ServiceHealth(name="AI Analysis", status=svc_status, latency_ms=latency, message=msg))
+    except httpx.TimeoutException:
+        services.append(ServiceHealth(name="AI Analysis", status="degraded", message="Timeout"))
+    except Exception as exc:
+        services.append(ServiceHealth(name="AI Analysis", status="unavailable", message=str(exc)[:120]))
+
+    # 4. File Storage (MinIO) — lightweight live-check via HTTP
+    scheme = "https" if settings.MINIO_USE_SSL else "http"
+    minio_health_url = f"{scheme}://{settings.MINIO_ENDPOINT}/minio/health/live"
+    try:
+        t0 = _time.monotonic()
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(minio_health_url)
+        latency = round((_time.monotonic() - t0) * 1000, 1)
+        svc_status = "healthy" if resp.status_code == 200 else "degraded"
+        msg = None if resp.status_code == 200 else f"HTTP {resp.status_code}"
+        services.append(ServiceHealth(name="File Storage", status=svc_status, latency_ms=latency, message=msg))
+    except httpx.TimeoutException:
+        services.append(ServiceHealth(name="File Storage", status="degraded", message="Timeout"))
+    except Exception as exc:
+        services.append(ServiceHealth(name="File Storage", status="unavailable", message=str(exc)[:120]))
+
+    if any(s.status == "unavailable" for s in services):
+        overall = "unavailable"
+    elif any(s.status == "degraded" for s in services):
+        overall = "degraded"
+    else:
+        overall = "healthy"
+
+    return HealthResponse(services=services, overall=overall)
+
+
+# ─────────────────────────────────────────────────────────────
+# Trends (week-over-week)
+# ─────────────────────────────────────────────────────────────
+
+class TrendValue(BaseModel):
+    current: int
+    previous: int
+    change_pct: Optional[float] = None
+
+
+class TrendsResponse(BaseModel):
+    days: int
+    submissions: TrendValue
+    findings: TrendValue
+    active_projects: TrendValue
+
+
+def _change_pct(current: int, previous: int) -> Optional[float]:
+    if previous == 0:
+        return None
+    return round(((current - previous) / previous) * 100, 1)
+
+
+@router.get("/trends", response_model=TrendsResponse)
+async def get_dashboard_trends(
+    days: int = Query(default=7, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return period-over-period trends for key metrics."""
+    org_member = db.query(OrgMember).filter(OrgMember.user_id == current_user.id).first()
+    if not org_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of any organization")
+    org_id = org_member.org_id
+
+    now = datetime.utcnow()
+    period_start = now - timedelta(days=days)
+    prev_start = period_start - timedelta(days=days)
+
+    project_ids_q = db.query(Project.id).filter(Project.org_id == org_id)
+
+    # Submissions
+    sub_current = db.query(func.count(Submission.id)).filter(
+        Submission.project_id.in_(project_ids_q),
+        Submission.created_at >= period_start,
+    ).scalar() or 0
+
+    sub_previous = db.query(func.count(Submission.id)).filter(
+        Submission.project_id.in_(project_ids_q),
+        Submission.created_at >= prev_start,
+        Submission.created_at < period_start,
+    ).scalar() or 0
+
+    # Findings (via analysis runs in this period)
+    submission_ids_current = [
+        s.id for s in db.query(Submission.id).filter(
+            Submission.project_id.in_(project_ids_q),
+            Submission.created_at >= period_start,
+        ).all()
+    ]
+    submission_ids_previous = [
+        s.id for s in db.query(Submission.id).filter(
+            Submission.project_id.in_(project_ids_q),
+            Submission.created_at >= prev_start,
+            Submission.created_at < period_start,
+        ).all()
+    ]
+
+    def _count_findings(submission_ids: list) -> int:
+        if not submission_ids:
+            return 0
+        run_ids = [ar.id for ar in db.query(AnalysisRun.id).filter(
+            AnalysisRun.submission_id.in_(submission_ids)
+        ).all()]
+        if not run_ids:
+            return 0
+        return db.query(func.count(Finding.id)).filter(
+            Finding.analysis_run_id.in_(run_ids)
+        ).scalar() or 0
+
+    find_current = _count_findings(submission_ids_current)
+    find_previous = _count_findings(submission_ids_previous)
+
+    # Active projects (projects with at least one submission in the period)
+    ap_current = db.query(func.count(func.distinct(Submission.project_id))).filter(
+        Submission.project_id.in_(project_ids_q),
+        Submission.created_at >= period_start,
+    ).scalar() or 0
+
+    ap_previous = db.query(func.count(func.distinct(Submission.project_id))).filter(
+        Submission.project_id.in_(project_ids_q),
+        Submission.created_at >= prev_start,
+        Submission.created_at < period_start,
+    ).scalar() or 0
+
+    return TrendsResponse(
+        days=days,
+        submissions=TrendValue(current=sub_current, previous=sub_previous, change_pct=_change_pct(sub_current, sub_previous)),
+        findings=TrendValue(current=find_current, previous=find_previous, change_pct=_change_pct(find_current, find_previous)),
+        active_projects=TrendValue(current=ap_current, previous=ap_previous, change_pct=_change_pct(ap_current, ap_previous)),
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Submission trend chart (per-day counts)
+# ─────────────────────────────────────────────────────────────
+
+class DayDataPoint(BaseModel):
+    date: str  # "YYYY-MM-DD"
+    count: int
+
+
+class SubmissionTrendResponse(BaseModel):
+    days: int
+    data: List[DayDataPoint]
+
+
+@router.get("/submission-trend", response_model=SubmissionTrendResponse)
+async def get_submission_trend(
+    days: int = Query(default=30, ge=7, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return daily submission counts for the last N days."""
+    org_member = db.query(OrgMember).filter(OrgMember.user_id == current_user.id).first()
+    if not org_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of any organization")
+    org_id = org_member.org_id
+
+    since = datetime.utcnow() - timedelta(days=days)
+    project_ids_q = db.query(Project.id).filter(Project.org_id == org_id)
+
+    rows = db.query(Submission.created_at).filter(
+        Submission.project_id.in_(project_ids_q),
+        Submission.created_at >= since,
+    ).all()
+
+    # Aggregate in Python — works for both SQLite and PostgreSQL
+    counts: dict[str, int] = {}
+    for (ts,) in rows:
+        day = ts.strftime("%Y-%m-%d")
+        counts[day] = counts.get(day, 0) + 1
+
+    # Build a complete list for every day in the range (fill gaps with 0)
+    data: List[DayDataPoint] = []
+    for i in range(days, 0, -1):
+        d = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
+        data.append(DayDataPoint(date=d, count=counts.get(d, 0)))
+
+    return SubmissionTrendResponse(days=days, data=data)

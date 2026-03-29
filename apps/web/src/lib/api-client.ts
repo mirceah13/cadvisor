@@ -157,6 +157,9 @@ export const api = {
 export const dashboardApi = {
   getStats: () => api.get<DashboardStats>('/dashboard/stats'),
   getActivity: (limit?: number) => api.get<RecentActivity>(`/dashboard/activity${limit ? `?limit=${limit}` : ''}`),
+  getHealth: () => api.get<HealthResponse>('/dashboard/health'),
+  getTrends: (days?: number) => api.get<TrendsData>(`/dashboard/trends${days ? `?days=${days}` : ''}`),
+  getSubmissionTrend: (days?: number) => api.get<SubmissionTrendData>(`/dashboard/submission-trend${days ? `?days=${days}` : ''}`),
 }
 
 // Types for dashboard
@@ -197,5 +200,40 @@ export interface ActivityItem {
 
 export interface RecentActivity {
   activities: ActivityItem[]
+}
+
+export interface ServiceHealth {
+  name: string
+  status: 'healthy' | 'degraded' | 'unavailable'
+  latency_ms?: number
+  message?: string
+}
+
+export interface HealthResponse {
+  services: ServiceHealth[]
+  overall: 'healthy' | 'degraded' | 'unavailable'
+}
+
+export interface TrendValue {
+  current: number
+  previous: number
+  change_pct: number | null
+}
+
+export interface TrendsData {
+  days: number
+  submissions: TrendValue
+  findings: TrendValue
+  active_projects: TrendValue
+}
+
+export interface DayDataPoint {
+  date: string
+  count: number
+}
+
+export interface SubmissionTrendData {
+  days: number
+  data: DayDataPoint[]
 }
 

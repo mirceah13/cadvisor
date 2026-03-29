@@ -63,6 +63,7 @@ def _build_project_dict(project: Project, db: Session) -> dict:
             AnalysisRun.status == "completed",
         )
         .order_by(desc(AnalysisRun.created_at))
+        .limit(1)
         .scalar()
     )
 

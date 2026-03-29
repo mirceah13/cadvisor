@@ -6,6 +6,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api-client'
+import { DashboardNav } from '@/components/dashboard-nav'
+import { PageHeader } from '@/components/page-header'
 
 export default function SecurityPage() {
   const router = useLoadingRouter()
@@ -101,35 +103,30 @@ export default function SecurityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Security Settings</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Update your password and security preferences
-          </p>
-        </div>
+    <>
+      <DashboardNav />
+      <div className="flex-1 space-y-6 p-8 pt-6 container max-w-2xl">
+        <PageHeader
+          title="Security Settings"
+          description="Update your password and security preferences"
+        />
 
         <Card className="p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Change Password</h2>
+          <h2 className="text-base font-semibold mb-6">Change Password</h2>
 
           {success && (
-            <div className="mb-4 rounded-md bg-green-50 p-4">
-              <p className="text-sm text-green-800">
-                Password changed successfully! Redirecting...
-              </p>
-            </div>
+            <p className="mb-4 text-sm text-green-600">
+              Password changed successfully! Redirecting...
+            </p>
           )}
 
           {error && (
-            <div className="mb-4 rounded-md bg-red-50 p-4">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
+            <p className="mb-4 text-sm text-destructive">{error}</p>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="currentPassword" className="block text-sm font-medium text-muted-foreground mb-1">
                 Current Password
               </label>
               <input
@@ -138,12 +135,12 @@ export default function SecurityPage() {
                 required
                 value={formData.currentPassword}
                 onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
             </div>
 
             <div>
-              <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="newPassword" className="block text-sm font-medium text-muted-foreground mb-1">
                 New Password
               </label>
               <input
@@ -152,7 +149,7 @@ export default function SecurityPage() {
                 required
                 value={formData.newPassword}
                 onChange={(e) => handlePasswordChange(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
               {formData.newPassword && (
                 <div className="mt-2">
@@ -161,18 +158,18 @@ export default function SecurityPage() {
                       <div
                         key={i}
                         className={`h-1 flex-1 rounded ${
-                          i < passwordStrength.score ? getPasswordStrengthColor() : 'bg-gray-200'
+                          i < passwordStrength.score ? getPasswordStrengthColor() : 'bg-muted'
                         }`}
                       />
                     ))}
                   </div>
-                  <p className="mt-1 text-xs text-gray-600">{passwordStrength.feedback}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{passwordStrength.feedback}</p>
                 </div>
               )}
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-muted-foreground mb-1">
                 Confirm New Password
               </label>
               <input
@@ -181,10 +178,10 @@ export default function SecurityPage() {
                 required
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
               {formData.confirmPassword && formData.newPassword !== formData.confirmPassword && (
-                <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
+                <p className="mt-1 text-xs text-destructive">Passwords do not match</p>
               )}
             </div>
 
@@ -206,8 +203,8 @@ export default function SecurityPage() {
           </form>
 
           <div className="mt-8 border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Password Requirements</h3>
-            <ul className="space-y-1 text-sm text-gray-600">
+            <h3 className="text-sm font-semibold mb-2">Password Requirements</h3>
+            <ul className="space-y-1 text-sm text-muted-foreground">
               <li>• At least 8 characters long</li>
               <li>• Contains uppercase and lowercase letters</li>
               <li>• Contains at least one number</li>
@@ -216,6 +213,6 @@ export default function SecurityPage() {
           </div>
         </Card>
       </div>
-    </div>
+    </>
   )
 }

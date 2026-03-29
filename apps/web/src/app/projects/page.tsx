@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LoadingLink } from '@/components/loading-link'
-import { Plus, FolderOpen, Calendar, FileText, Building2, TrendingUp, AlertCircle } from 'lucide-react'
+import { Plus, FolderOpen, Calendar, FileText, AlertCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { formatDistanceToNow } from 'date-fns'
 import { triggerLoading } from '@/components/global-loading-spinner'
@@ -54,31 +55,19 @@ export default function ProjectsPage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 space-y-8 p-8 pt-6 container max-w-7xl">
-        {/* Hero Section */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-8 text-primary-foreground shadow-2xl">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]" />
-          <div className="relative flex items-center justify-between">
-            <div className="space-y-2">
-              <h1 className="text-4xl font-bold tracking-tight">Projects</h1>
-              <p className="text-primary-foreground/90 text-lg max-w-2xl">
-                Manage your compliance projects and track submissions
-              </p>
-            </div>
-            <Button 
-              size="lg" 
-              variant="secondary" 
-              asChild 
-              className="shadow-lg hover:shadow-xl transition-all"
-              onClick={() => triggerLoading()}
-            >
+      <div className="flex-1 space-y-6 p-8 pt-6 container max-w-7xl">
+        <PageHeader
+          title="Projects"
+          description="Manage compliance projects and track submissions"
+          actions={
+            <Button size="sm" asChild onClick={() => triggerLoading()}>
               <LoadingLink href="/projects/new">
-                <Plus className="mr-2 h-5 w-5" />
+                <Plus className="mr-2 h-4 w-4" />
                 New Project
               </LoadingLink>
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -100,90 +89,45 @@ export default function ProjectsPage() {
             ))}
           </div>
         ) : error ? (
-          <Card className="p-12 border-2 border-red-200 dark:border-red-900">
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="p-4 rounded-full bg-red-100 dark:bg-red-950 mb-4">
-                <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2 text-red-900 dark:text-red-100">Error Loading Projects</h3>
-              <p className="text-red-700 dark:text-red-300 mb-6 max-w-md">
-                {error}
-              </p>
-              <Button variant="outline" onClick={() => window.location.reload()}>
-                Retry
-              </Button>
-            </div>
-          </Card>
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-6 text-center">
+            <p className="text-sm text-muted-foreground mb-3">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Retry</Button>
+          </div>
         ) : projects.length === 0 ? (
-          <Card className="p-12 border-2 border-dashed border-primary/20">
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="p-4 rounded-full bg-primary/10 mb-4">
-                <FolderOpen className="h-12 w-12 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">No projects yet</h3>
-              <p className="text-muted-foreground mb-6 max-w-md">
-                Get started by creating your first project to organize your CAD submissions
-              </p>
-              <Button 
-                size="lg" 
-                asChild 
-                className="shadow-lg"
-                onClick={() => triggerLoading()}
-              >
-                <LoadingLink href="/projects/new">
-                  <Plus className="mr-2 h-5 w-5" />
-                  Create Project
-                </LoadingLink>
-              </Button>
-            </div>
-          </Card>
+          <div className="rounded-md border border-dashed p-12 text-center">
+            <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <h3 className="text-sm font-medium mb-1">No projects yet</h3>
+            <p className="text-sm text-muted-foreground mb-4">Create your first project to organize CAD submissions</p>
+            <Button size="sm" asChild onClick={() => triggerLoading()}>
+              <LoadingLink href="/projects/new"><Plus className="mr-2 h-4 w-4" />Create Project</LoadingLink>
+            </Button>
+          </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <LoadingLink 
-                key={project.id} 
-                href={`/projects/${project.id}`}
-                className="block group"
-              >
-                <Card className="p-6 h-full hover:shadow-lg hover:border-primary/40 transition-all border-l-4 border-l-transparent hover:border-l-primary">
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors flex-shrink-0">
-                          <Building2 className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-lg line-clamp-1 group-hover:text-primary transition-colors">
-                            {project.name}
-                          </h3>
-                        </div>
-                      </div>
+              <LoadingLink key={project.id} href={`/projects/${project.id}`} className="block group">
+                <Card className="p-5 h-full hover:border-foreground/20 transition-colors">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-medium line-clamp-1 group-hover:text-primary transition-colors">
+                        {project.name}
+                      </h3>
                       {project.building_type && (
-                        <Badge className="bg-primary/10 text-primary border-primary/20 flex-shrink-0">
-                          {project.building_type}
-                        </Badge>
+                        <Badge variant="secondary" className="shrink-0 text-xs">{project.building_type}</Badge>
                       )}
                     </div>
-                    
                     {project.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {project.description}
-                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
                     )}
-                    
                     <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>{project._count?.submissions || 0} {project._count?.submissions === 1 ? 'submission' : 'submissions'}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>
-                          {formatDistanceToNow(new Date(project.updated_at), {
-                            addSuffix: true,
-                          })}
-                        </span>
-                      </div>
+                      <span className="flex items-center gap-1">
+                        <FileText className="h-3 w-3" />
+                        {project._count?.submissions || 0} submissions
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}
+                      </span>
                     </div>
                   </div>
                 </Card>

@@ -4,58 +4,59 @@
 
 @layer base {
   :root {
-    --background: 36 33% 97%;          /* warm cream #F8F5F1 */
-    --foreground: 240 10% 9%;          /* near black #141420 */
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 9%;
+    /* Anthropic-inspired warm minimal palette */
+    --background: 30 20% 96%;          /* #F5F2EE warm cream */
+    --foreground: 20 6% 11%;           /* #1C1917 warm near-black */
+    --card: 0 0% 100%;                 /* pure white cards */
+    --card-foreground: 20 6% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 9%;
-    --primary: 263 52% 51%;            /* purple-violet #6B44C2 */
+    --popover-foreground: 20 6% 11%;
+    --primary: 18 55% 52%;             /* #C96442 terracotta */
     --primary-foreground: 0 0% 98%;
-    --secondary: 263 30% 95%;          /* light purple tint */
-    --secondary-foreground: 263 52% 40%;
-    --muted: 36 20% 94%;              /* warm light gray */
-    --muted-foreground: 240 5% 46%;
-    --accent: 263 40% 93%;            /* very light purple */
-    --accent-foreground: 263 52% 40%;
-    --destructive: 0 84.2% 60.2%;
+    --secondary: 30 15% 92%;           /* warm stone tint */
+    --secondary-foreground: 20 6% 25%;
+    --muted: 30 14% 91%;               /* #EDE9E3 warm muted */
+    --muted-foreground: 25 5% 47%;     /* #78716C warm stone */
+    --accent: 30 20% 93%;              /* very light warm */
+    --accent-foreground: 20 6% 20%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 36 20% 89%;             /* warm-tinted border */
-    --input: 36 20% 89%;
-    --ring: 263 52% 51%;
-    --radius: 0.875rem;
-    --chart-1: 263 52% 51%;           /* purple */
-    --chart-2: 22 100% 55%;           /* orange */
-    --chart-3: 142 71% 45%;           /* green */
-    --chart-4: 45 93% 58%;            /* yellow */
-    --chart-5: 200 80% 50%;           /* blue */
+    --border: 30 14% 87%;              /* #E8E3DC warm border */
+    --input: 30 14% 87%;
+    --ring: 18 55% 52%;
+    --radius: 0.5rem;                  /* precise, less bubbly */
+    --chart-1: 18 55% 52%;             /* terracotta */
+    --chart-2: 25 80% 55%;             /* amber */
+    --chart-3: 152 45% 42%;            /* muted green */
+    --chart-4: 200 45% 52%;            /* slate blue */
+    --chart-5: 45 75% 55%;             /* warm yellow */
   }
 
   .dark {
-    --background: 240 10% 6%;         /* deep dark #0D0D14 */
-    --foreground: 36 20% 96%;         /* warm off-white */
-    --card: 240 10% 9%;
-    --card-foreground: 36 20% 96%;
-    --popover: 240 10% 9%;
-    --popover-foreground: 36 20% 96%;
-    --primary: 263 52% 62%;           /* slightly lighter purple in dark */
+    --background: 20 8% 11%;           /* #1C1917 warm dark */
+    --foreground: 30 15% 92%;          /* warm off-white */
+    --card: 20 8% 14%;                 /* #28231E slightly lighter */
+    --card-foreground: 30 15% 92%;
+    --popover: 20 8% 14%;
+    --popover-foreground: 30 15% 92%;
+    --primary: 18 60% 60%;             /* lighter terracotta in dark */
     --primary-foreground: 0 0% 98%;
-    --secondary: 240 5% 15%;
-    --secondary-foreground: 36 20% 96%;
-    --muted: 240 5% 14%;
-    --muted-foreground: 240 5% 64%;
-    --accent: 263 40% 22%;
-    --accent-foreground: 36 20% 96%;
-    --destructive: 0 62.8% 30.6%;
+    --secondary: 20 6% 19%;
+    --secondary-foreground: 30 15% 88%;
+    --muted: 20 6% 18%;
+    --muted-foreground: 30 8% 58%;
+    --accent: 20 8% 20%;
+    --accent-foreground: 30 15% 88%;
+    --destructive: 0 62% 40%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5% 16%;
-    --input: 240 5% 16%;
-    --ring: 263 52% 65%;
-    --chart-1: 263 52% 65%;
-    --chart-2: 22 100% 65%;
-    --chart-3: 142 71% 55%;
-    --chart-4: 45 93% 65%;
-    --chart-5: 200 80% 60%;
+    --border: 20 6% 22%;
+    --input: 20 6% 22%;
+    --ring: 18 60% 60%;
+    --chart-1: 18 60% 62%;
+    --chart-2: 25 80% 62%;
+    --chart-3: 152 40% 52%;
+    --chart-4: 200 45% 60%;
+    --chart-5: 45 70% 62%;
   }
 }
 
@@ -64,55 +65,32 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
-  /* Solvit-style soft card shadows */
-  .card, [class*="card"] {
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 4px 12px 0 rgb(0 0 0 / 0.06);
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.01em;
   }
 }
 
 @layer utilities {
+  /* Loading shimmer for skeletons */
   @keyframes shimmer {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(100%);
-    }
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
   }
-  
   .animate-shimmer {
     animation: shimmer 2s infinite;
   }
-  
-  @keyframes gradient {
-    0%, 100% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
+
+  /* Indeterminate progress */
+  @keyframes indeterminate {
+    0%   { transform: translateX(-100%) scaleX(0.4); }
+    40%  { transform: translateX(0%)    scaleX(0.4); }
+    60%  { transform: translateX(60%)   scaleX(0.6); }
+    100% { transform: translateX(100%)  scaleX(0.4); }
   }
-  
-  .animate-gradient {
-    background-size: 200% 200%;
-    animation: gradient 15s ease infinite;
-  }
-  
-  .gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(263 60% 38%) 100%);
-  }
-  
-  .glass-effect {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  
-  .dark .glass-effect {
-    background: rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+  .animate-indeterminate {
+    animation: indeterminate 1.5s ease-in-out infinite;
   }
 }

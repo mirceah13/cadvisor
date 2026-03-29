@@ -25,6 +25,7 @@ import { useToast } from '@/hooks/use-toast'
 import { FileDetailsTab } from '@/components/file-details-tab'
 import { AnalysisProgress } from '@/components/analysis-progress'
 import { Progress } from '@/components/ui/progress'
+import { PageHeader } from '@/components/page-header'
 import { 
   ArrowLeft, 
   Upload, 
@@ -752,22 +753,6 @@ export default function SubmissionDetailPage() {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-      case 'indexed':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'processing':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      case 'pending_review':
-      case 'draft':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-    }
-  }
 
   if (loading) {
     return (
@@ -786,20 +771,13 @@ export default function SubmissionDetailPage() {
       <>
         <DashboardNav />
         <div className="flex-1 p-8 pt-6 container">
-          <Card className="border-red-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="h-5 w-5" />
-                Error
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-red-600">{error || 'Submission not found'}</p>
-              <Button asChild className="mt-4">
-                <Link href="/submissions">Back to Submissions</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-6 text-center max-w-md">
+            <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-3" />
+            <p className="text-sm text-destructive mb-4">{error || 'Submission not found'}</p>
+            <Button asChild variant="outline">
+              <Link href="/submissions">Back to Submissions</Link>
+            </Button>
+          </div>
         </div>
       </>
     )
@@ -810,161 +788,100 @@ export default function SubmissionDetailPage() {
       <DashboardNav />
       <div className="flex-1 space-y-6 p-6 pt-6 container max-w-7xl">
         {/* Hero Section */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-8 text-primary-foreground shadow-2xl">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]" />
-          <div className="relative">
-            <div className="flex items-start justify-between">
-              <div className="space-y-4 flex-1">
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    asChild
-                    className="text-primary-foreground/90 hover:text-primary-foreground hover:bg-white/10 -ml-2"
-                  >
-                    <Link href="/submissions">
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Back to Submissions
-                    </Link>
-                  </Button>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-white/10 rounded-xl backdrop-blur-sm">
-                    <FileText className="h-8 w-8" />
-                  </div>
-                  <div>
-                    <h1 className="text-4xl font-bold tracking-tight">{submission.name}</h1>
-                    <div className="flex items-center gap-3 mt-2 flex-wrap">
-                      <Badge 
-                        className={`${getStatusColor(submission.status)} bg-white/20 text-white border-white/30`}
-                      >
-                        {submission.status}
-                      </Badge>
-                      {submission.building_type && (
-                        <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                          {submission.building_type}
-                        </Badge>
-                      )}
-                      {submission.project_name && (
-                        <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                          <FolderOpen className="h-3 w-3 mr-1" />
-                          {submission.project_name}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {submission.description && (
-                  <p className="text-primary-foreground/90 text-lg max-w-3xl">
-                    {submission.description}
-                  </p>
-                )}
-                <div className="flex items-center gap-6 text-sm text-primary-foreground/80">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    <span>Created {formatDistanceToNow(new Date(submission.created_at), { addSuffix: true })}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    <span>{submission.files_count} {submission.files_count === 1 ? 'File' : 'Files'}</span>
-                  </div>
-                  {analysisRuns.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      <span>{analysisRuns.length} {analysisRuns.length === 1 ? 'Analysis' : 'Analyses'}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 ml-4">
-                {!analyzing && files.length > 0 && !isParsingFiles && (
-                  <Button 
-                    onClick={handleStartAnalysis}
-                    className="bg-white dark:bg-white text-primary hover:bg-gray-50 dark:hover:bg-gray-100 shadow-lg border-2 border-white/20"
-                  >
-                    <Play className="mr-2 h-4 w-4" />
-                    Start Analysis
-                  </Button>
-                )}
-                {(analyzing || isParsingFiles) && (
-                  <Button 
-                    disabled
-                    className="bg-white/60 dark:bg-white/50 text-primary border-2 border-white/30 cursor-not-allowed"
-                  >
-                    <Clock className="mr-2 h-4 w-4 animate-spin" />
-                    {isParsingFiles ? 'Processing files...' : 'Analyzing...'}
-                  </Button>
-                )}
-                <Button 
-                  variant="outline"
-                  className="border-2 border-white/30 bg-white/10 text-white hover:bg-white/20 hover:border-white/50 backdrop-blur-sm"
-                  onClick={handleDelete}
-                >
-                  <Trash2 className="h-4 w-4" />
+        <PageHeader
+          title={submission.name}
+          description={submission.description || undefined}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" asChild className="-ml-2">
+                <Link href="/submissions">
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Link>
+              </Button>
+              {!analyzing && files.length > 0 && !isParsingFiles && (
+                <Button onClick={handleStartAnalysis}>
+                  <Play className="mr-2 h-4 w-4" />
+                  Run Analysis
                 </Button>
-              </div>
+              )}
+              {(analyzing || isParsingFiles) && (
+                <Button disabled variant="outline">
+                  <Clock className="mr-2 h-4 w-4 animate-spin" />
+                  {isParsingFiles ? 'Processing...' : 'Analyzing...'}
+                </Button>
+              )}
+              <Button variant="ghost" size="icon" onClick={handleDelete}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
+          }
+        />
+
+        {/* Meta row */}
+        <div className="flex items-center gap-2 flex-wrap -mt-4">
+          <Badge variant="secondary">{submission.status}</Badge>
+          {submission.building_type && (
+            <Badge variant="outline">{submission.building_type}</Badge>
+          )}
+          {submission.project_name && (
+            <Badge variant="outline">
+              <FolderOpen className="h-3 w-3 mr-1" />
+              {submission.project_name}
+            </Badge>
+          )}
+          <span className="ml-auto flex items-center gap-1 text-sm text-muted-foreground">
+            <Calendar className="h-3.5 w-3.5" />
+            {formatDistanceToNow(new Date(submission.created_at), { addSuffix: true })}
+          </span>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards */}}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-100 dark:border-blue-900">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full -mr-10 -mt-10" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Files</CardTitle>
-              <div className="p-2 rounded-lg bg-blue-500/15">
-                <FileText className="h-4 w-4 text-blue-600" />
-              </div>
+              <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="relative">
-              <div className="text-3xl font-bold text-blue-700 dark:text-blue-400">{submission.files_count}</div>
+            <CardContent>
+              <div className="text-3xl font-bold">{submission.files_count}</div>
               <p className="text-xs text-muted-foreground mt-1">CAD files uploaded</p>
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-100 dark:border-purple-900">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full -mr-10 -mt-10" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Analyses</CardTitle>
-              <div className="p-2 rounded-lg bg-purple-500/15">
-                <BarChart3 className="h-4 w-4 text-purple-600" />
-              </div>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="relative">
-              <div className="text-3xl font-bold text-purple-700 dark:text-purple-400">{analysisRuns.length}</div>
+            <CardContent>
+              <div className="text-3xl font-bold">{analysisRuns.length}</div>
               <p className="text-xs text-muted-foreground mt-1">{analysisRuns.filter(r => r.status === 'completed').length} completed</p>
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-100 dark:border-amber-900">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full -mr-10 -mt-10" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Findings</CardTitle>
-              <div className="p-2 rounded-lg bg-amber-500/15">
-                <AlertCircle className="h-4 w-4 text-amber-600" />
-              </div>
+              <AlertCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="relative">
-              <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">{findings.length}</div>
+            <CardContent>
+              <div className="text-3xl font-bold">{findings.length}</div>
               <p className="text-xs text-muted-foreground mt-1">{findings.filter(f => f.severity === 'critical').length} critical</p>
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-100 dark:border-emerald-900">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full -mr-10 -mt-10" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Status</CardTitle>
-              <div className="p-2 rounded-lg bg-emerald-500/15">
-                {submission.status === 'completed' ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <Clock className="h-4 w-4 text-emerald-600" />
-                )}
-              </div>
+              {submission.status === 'completed' ? (
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              )}
             </CardHeader>
-            <CardContent className="relative">
-              <div className="text-2xl font-bold capitalize text-emerald-700 dark:text-emerald-400">{submission.status}</div>
+            <CardContent>
+              <div className="text-2xl font-bold capitalize">{submission.status}</div>
               <p className="text-xs text-muted-foreground mt-1">{submission.building_type || 'Type not specified'}</p>
             </CardContent>
           </Card>
@@ -1011,11 +928,11 @@ export default function SubmissionDetailPage() {
 
           <TabsContent value="files" className="space-y-4">
             <Card className="border-2">
-              <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+              <CardHeader className="border-b">
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-primary" />
+                      <FileText className="h-5 w-5 text-muted-foreground" />
                       Uploaded Files
                     </CardTitle>
                     <CardDescription>
@@ -1044,13 +961,13 @@ export default function SubmissionDetailPage() {
               <CardContent className="pt-6">
                 {/* File Parsing Progress */}
                 {uploadedFilesState.length > 0 && isParsingFiles && (
-                  <Card className="mb-6 border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900">
+                  <Card className="mb-6 border-2 border-border bg-muted/30">
                     <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
-                        <Clock className="h-5 w-5 animate-spin" />
+                      <CardTitle className="flex items-center gap-2">
+                        <Clock className="h-5 w-5 animate-spin text-primary" />
                         Processing Files
                       </CardTitle>
-                      <CardDescription className="text-blue-700 dark:text-blue-300">
+                      <CardDescription>
                         Please wait while your files are being parsed...
                       </CardDescription>
                     </CardHeader>
@@ -1115,21 +1032,16 @@ export default function SubmissionDetailPage() {
                                     <div className="space-y-2">
                                       {/* Animated progress bar */}
                                       <div className="flex items-center gap-2">
-                                        <div className="h-2 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+                                        <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden relative">
                                           <div 
-                                            className="h-full rounded-full absolute inset-0 bg-gradient-to-r from-blue-400 via-blue-600 to-blue-400"
-                                            style={{ 
-                                              width: '100%',
-                                              animation: 'gradient 3s ease infinite',
-                                              backgroundSize: '200% 100%'
-                                            }}
+                                            className="h-full rounded-full absolute inset-0 bg-primary animate-indeterminate"
                                           />
                                         </div>
                                       </div>
                                       {/* Stage description */}
                                       <div className="flex items-start gap-2">
                                         <div className="flex-1">
-                                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                          <p className="text-xs text-primary font-medium">
                                             {file.parsingStage || 'Processing file...'}
                                           </p>
                                           {file.parsingStage?.includes('Translating') && (
@@ -1150,10 +1062,10 @@ export default function SubmissionDetailPage() {
                                   {/* Stuck File Status with Retry Button */}
                                   {file.status === 'stuck' && (
                                     <div className="space-y-3">
-                                      <div className="flex items-start gap-2">
-                                        <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                                        <div className="flex items-start gap-2">
+                                        <AlertCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                                         <div className="flex-1">
-                                          <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                                          <p className="text-sm text-muted-foreground font-medium">
                                             {file.parsingStage || 'Processing appears stuck'}
                                           </p>
                                           <p className="text-xs text-muted-foreground mt-1">
@@ -1165,7 +1077,7 @@ export default function SubmissionDetailPage() {
                                         size="sm"
                                         variant="outline"
                                         onClick={() => retryFileProcessing(file.id)}
-                                        className="w-full border-2 border-amber-500 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-600 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 dark:border-amber-700 dark:hover:border-amber-600"
+                                        className="w-full"
                                       >
                                         <RefreshCw className="h-3 w-3 mr-2" />
                                         Retry Processing
@@ -1200,12 +1112,10 @@ export default function SubmissionDetailPage() {
                 )}
                 
                 {files.length === 0 ? (
-                  <div className="text-center py-16">
-                    <div className="p-4 bg-primary/10 rounded-full w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-                      <FileText className="h-12 w-12 text-primary" />
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">No files uploaded</h3>
-                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  <div className="rounded-md border border-dashed p-12 text-center">
+                    <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                    <h3 className="text-sm font-semibold mb-1">No files uploaded</h3>
+                    <p className="text-muted-foreground mb-4 text-sm max-w-md mx-auto">
                       Upload CAD files (.dwg, .dxf), IFC models, or PDF documents to get started with analysis
                     </p>
                     <input
@@ -1216,7 +1126,7 @@ export default function SubmissionDetailPage() {
                       onChange={handleFileUpload}
                       className="hidden"
                     />
-                    <Button asChild disabled={uploading || isParsingFiles} size="lg" className="shadow-lg">
+                    <Button asChild disabled={uploading || isParsingFiles} size="lg">
                       <label htmlFor="file-upload-first" className={uploading || isParsingFiles ? 'cursor-not-allowed' : 'cursor-pointer'}>
                         <Upload className="mr-2 h-5 w-5" />
                         {uploading ? 'Uploading...' : isParsingFiles ? 'Processing...' : 'Upload Your First File'}
@@ -1299,17 +1209,13 @@ export default function SubmissionDetailPage() {
           <TabsContent value="analysis" className="space-y-6">
             {/* Analysis in Progress Banner */}
             {runningAnalysisId && (
-              <Card className="border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900">
+              <Card className="border-2 border-border bg-muted/30">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white dark:bg-blue-950 rounded-full">
-                      <Clock className="h-8 w-8 text-blue-600 animate-spin" />
-                    </div>
+                    <Clock className="h-6 w-6 text-primary animate-spin shrink-0" />
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100">
-                        Analysis in Progress
-                      </h3>
-                      <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                      <h3 className="text-sm font-semibold">Analysis in Progress</h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Analyzing your submission for compliance issues. This may take a few minutes...
                       </p>
                     </div>
@@ -1358,11 +1264,9 @@ export default function SubmissionDetailPage() {
             })()}
 
             {/* Run Analysis Card */}
-            <div className="flex items-center justify-between px-5 py-4 rounded-xl border-2 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+            <div className="flex items-center justify-between px-5 py-4 rounded-lg border bg-muted/30">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Play className="h-5 w-5 text-primary" />
-                </div>
+                <Play className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-semibold text-sm">Compliance Analysis</p>
                   <p className="text-xs text-muted-foreground">AI-powered compliance checks against building codes and regulations</p>
@@ -1419,17 +1323,13 @@ export default function SubmissionDetailPage() {
                         }}
                       >
                         <div className="flex items-center gap-4 flex-1">
-                          <div className={`p-2 rounded-lg ${
-                            run.status === 'completed' ? 'bg-green-100 dark:bg-green-950' :
-                            run.status === 'running' ? 'bg-blue-100 dark:bg-blue-950' :
-                            'bg-red-100 dark:bg-red-950'
-                          }`}>
+                          <div className="shrink-0">
                             {run.status === 'completed' ? (
-                              <CheckCircle2 className="h-6 w-6 text-green-600" />
+                              <CheckCircle2 className="h-5 w-5 text-primary" />
                             ) : run.status === 'running' ? (
-                              <Clock className="h-6 w-6 text-blue-600 animate-spin" />
+                              <Clock className="h-5 w-5 text-muted-foreground animate-spin" />
                             ) : (
-                              <AlertCircle className="h-6 w-6 text-red-600" />
+                              <AlertCircle className="h-5 w-5 text-destructive" />
                             )}
                           </div>
                           <div className="flex-1">
@@ -1461,7 +1361,7 @@ export default function SubmissionDetailPage() {
                               </div>
                             )}
                             {run.status === 'failed' && run.error_message && (
-                              <p className="text-xs text-red-600 mt-2 line-clamp-2" title={run.error_message}>
+                              <p className="text-xs text-destructive mt-2 line-clamp-2" title={run.error_message}>
                                 Error: {run.error_message}
                               </p>
                             )}
@@ -1522,11 +1422,7 @@ export default function SubmissionDetailPage() {
                     {findings.map((finding, index) => (
                       <div
                         key={finding.id}
-                        className={`rounded-lg border transition-all duration-200 hover:shadow-sm ${
-                          finding.severity === 'critical' ? 'border-red-800/40 bg-red-950/20' :
-                          finding.severity === 'warning' ? 'border-yellow-800/40 bg-yellow-950/20' :
-                          'border-blue-800/40 bg-blue-950/20'
-                        }`}
+                        className="rounded-lg border transition-all duration-200"
                       >
                         {/* Header row */}
                         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-inherit">
@@ -1580,12 +1476,10 @@ export default function SubmissionDetailPage() {
             ) : analysisRuns.length === 0 ? (
               <Card className="border-2 border-dashed">
                 <CardContent className="pt-6">
-                  <div className="text-center py-16">
-                    <div className="p-4 bg-primary/10 rounded-full w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-                      <Play className="h-12 w-12 text-primary" />
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">Ready to analyze</h3>
-                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  <div className="rounded-md border border-dashed p-12 text-center">
+                    <Play className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                    <h3 className="text-sm font-semibold mb-1">Ready to analyze</h3>
+                    <p className="text-muted-foreground mb-4 text-sm max-w-md mx-auto">
                       Upload CAD files first, then run compliance analysis to identify potential issues
                     </p>
                     {files.length === 0 && (
@@ -1606,7 +1500,7 @@ export default function SubmissionDetailPage() {
                         </label>
                       </Button>
                     ) : (
-                      <Button onClick={handleStartAnalysis} size="lg" className="shadow-lg">
+                      <Button onClick={handleStartAnalysis} size="lg">
                         <Play className="mr-2 h-5 w-5" />
                         Run Your First Analysis
                       </Button>
@@ -1619,9 +1513,9 @@ export default function SubmissionDetailPage() {
 
           <TabsContent value="settings" className="space-y-4">
             <Card className="border-2">
-              <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+              <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-primary" />
+                  <Settings className="h-5 w-5 text-muted-foreground" />
                   Submission Settings
                 </CardTitle>
                 <CardDescription>

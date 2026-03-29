@@ -6,6 +6,7 @@ import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -411,34 +412,14 @@ function NewSubmissionPageInner() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 space-y-0">
-        {/* Hero Section */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/95 to-primary/80 text-white">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
-          <div className="container relative py-8 px-6">
-            <Button 
-              variant="ghost" 
-              onClick={() => router.push('/submissions')}
-              className="mb-4 text-white hover:bg-white/10"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Submissions
-            </Button>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm">
-                <Upload className="h-8 w-8" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">New Submission</h1>
-                <p className="text-white/80">Upload architectural plans for comprehensive analysis</p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="flex-1 p-8 pt-6 container max-w-2xl">
+        <PageHeader
+          title="New Submission"
+          description="Upload architectural plans for compliance analysis"
+          className="mb-8"
+        />
 
         {/* Form Section */}
-        <div className="container py-8 px-6">
           <Card>
             <CardHeader>
               <CardTitle>Submission Details</CardTitle>
@@ -656,40 +637,14 @@ function NewSubmissionPageInner() {
                               </div>
                             )}
                             
-                            {/* Parsing Status with Progress Indicator */}
                             {file.status === 'parsing' && (
                               <div className="space-y-2">
-                                {/* Animated progress bar */}
-                                <div className="flex items-center gap-2">
-                                  <div className="h-2 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
-                                    <div 
-                                      className="h-full rounded-full absolute inset-0 bg-gradient-to-r from-blue-400 via-blue-600 to-blue-400"
-                                      style={{ 
-                                        width: '100%',
-                                        animation: 'gradient 3s ease infinite',
-                                        backgroundSize: '200% 100%'
-                                      }}
-                                    />
-                                  </div>
+                                <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
+                                  <div className="h-full bg-primary rounded-full animate-indeterminate" />
                                 </div>
-                                {/* Stage description */}
-                                <div className="flex items-start gap-2">
-                                  <div className="flex-1">
-                                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                                      {file.parsingStage || 'Processing file...'}
-                                    </p>
-                                    {file.parsingStage?.includes('Translating') && (
-                                      <p className="text-xs text-muted-foreground mt-0.5">
-                                        This typically takes 30-60 seconds
-                                      </p>
-                                    )}
-                                    {file.parsingStage?.includes('Extracting') && (
-                                      <p className="text-xs text-muted-foreground mt-0.5">
-                                        Extracting CAD properties and metadata
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {file.parsingStage || 'Processing file...'}
+                                </p>
                               </div>
                             )}
                             
@@ -775,7 +730,6 @@ function NewSubmissionPageInner() {
               </CardContent>
             </Card>
           )}
-        </div>
       </div>
     </>
   )

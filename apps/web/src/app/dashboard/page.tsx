@@ -4,9 +4,10 @@ import { DashboardOverview } from '@/components/dashboard/overview'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { FindingSeverityChart } from '@/components/dashboard/finding-severity-chart'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Upload, FileText, BarChart3, FolderPlus, Database } from 'lucide-react'
+import { Plus, Upload, BarChart3, FolderPlus, Database } from 'lucide-react'
 import { LoadingLink } from '@/components/loading-link'
 import { triggerLoading } from '@/components/global-loading-spinner'
 import { useEffect, useState } from 'react'
@@ -26,45 +27,39 @@ export default function DashboardPage() {
     }
     fetchStats()
   }, [])
+
   return (
     <>
       <DashboardNav />
       <div className="flex-1 space-y-8 p-8 pt-6 container max-w-7xl">
-        {/* Hero Section */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-6 text-primary-foreground shadow-2xl">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]" />
-          <div className="relative flex items-center justify-between">
-            <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-              <p className="text-primary-foreground/80 text-sm">
-                AI-powered CAD compliance analysis for your architectural projects
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="lg" asChild className="shadow-lg hover:shadow-xl transition-all" onClick={() => triggerLoading()}>
+        <PageHeader
+          title="Dashboard"
+          description="CAD compliance analysis for your architectural projects"
+          actions={
+            <>
+              <Button variant="outline" size="sm" asChild onClick={() => triggerLoading()}>
                 <LoadingLink href="/projects">
-                  <FolderPlus className="mr-2 h-5 w-5" />
-                  View Projects
+                  <FolderPlus className="mr-2 h-4 w-4" />
+                  Projects
                 </LoadingLink>
               </Button>
-              <Button variant="secondary" size="lg" asChild className="shadow-lg hover:shadow-xl transition-all" onClick={() => triggerLoading()}>
+              <Button size="sm" asChild onClick={() => triggerLoading()}>
                 <LoadingLink href="/submissions/new">
-                  <Plus className="mr-2 h-5 w-5" />
+                  <Plus className="mr-2 h-4 w-4" />
                   New Submission
                 </LoadingLink>
               </Button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         <DashboardOverview />
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7 items-start">
-          <div className="col-span-4">
+        <div className="grid gap-6 lg:grid-cols-7 items-start">
+          <div className="lg:col-span-4">
             <RecentActivity />
           </div>
-          <div className="col-span-3 space-y-6">
-            {/* Finding Severity Chart — only shown when there are actual findings */}
+          <div className="lg:col-span-3 space-y-6">
             {stats && (stats.findings.critical + stats.findings.high + stats.findings.medium + stats.findings.low) > 0 && (
               <FindingSeverityChart
                 critical={stats.findings.critical}
@@ -76,98 +71,50 @@ export default function DashboardPage() {
 
             {/* Quick Actions */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  Quick Actions
-                </CardTitle>
-                <CardDescription>
-                  Common tasks and shortcuts
-                </CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <Button variant="outline" className="w-full justify-start h-auto py-3 hover:bg-primary/5 hover:border-primary/40 transition-all group" asChild onClick={() => triggerLoading()}>
-                  <LoadingLink href="/submissions/new">
-                    <div className="flex items-start gap-3 text-left">
-                      <Upload className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary group-hover:scale-110 transition-transform" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium group-hover:text-primary transition-colors">Upload Submission</div>
-                        <div className="text-xs text-muted-foreground">
-                          Upload CAD files for compliance analysis
-                        </div>
+              <CardContent className="space-y-1 pt-0">
+                {[
+                  { href: '/submissions/new', icon: Upload, label: 'New Submission', desc: 'Upload CAD files for analysis' },
+                  { href: '/knowledge-base/upload', icon: Database, label: 'Add to Knowledge Base', desc: 'Upload building codes' },
+                  { href: '/projects', icon: FolderPlus, label: 'Manage Projects', desc: 'View and organize projects' },
+                  { href: '/reports', icon: BarChart3, label: 'View Reports', desc: 'Compliance reports and analytics' },
+                ].map(({ href, icon: Icon, label, desc }) => (
+                  <Button
+                    key={href}
+                    variant="ghost"
+                    className="w-full justify-start h-auto py-2.5 px-3 hover:bg-muted"
+                    asChild
+                    onClick={() => triggerLoading()}
+                  >
+                    <LoadingLink href={href}>
+                      <Icon className="h-4 w-4 mr-3 text-muted-foreground shrink-0" />
+                      <div className="text-left">
+                        <div className="text-sm font-medium">{label}</div>
+                        <div className="text-xs text-muted-foreground">{desc}</div>
                       </div>
-                    </div>
-                  </LoadingLink>
-                </Button>
-                <Button variant="outline" className="w-full justify-start h-auto py-3 hover:bg-primary/5 hover:border-primary/40 transition-all group" asChild onClick={() => triggerLoading()}>
-                  <LoadingLink href="/knowledge-base/upload">
-                    <div className="flex items-start gap-3 text-left">
-                      <Database className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary group-hover:scale-110 transition-transform" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium group-hover:text-primary transition-colors">Add Knowledge Base Document</div>
-                        <div className="text-xs text-muted-foreground">
-                          Upload building codes and regulations
-                        </div>
-                      </div>
-                    </div>
-                  </LoadingLink>
-                </Button>
-                <Button variant="outline" className="w-full justify-start h-auto py-3 hover:bg-primary/5 hover:border-primary/40 transition-all group" asChild onClick={() => triggerLoading()}>
-                  <LoadingLink href="/projects">
-                    <div className="flex items-start gap-3 text-left">
-                      <FolderPlus className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary group-hover:scale-110 transition-transform" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium group-hover:text-primary transition-colors">Manage Projects</div>
-                        <div className="text-xs text-muted-foreground">
-                          View and organize your projects
-                        </div>
-                      </div>
-                    </div>
-                  </LoadingLink>
-                </Button>
-                <Button variant="outline" className="w-full justify-start h-auto py-3 hover:bg-primary/5 hover:border-primary/40 transition-all group" asChild onClick={() => triggerLoading()}>
-                  <LoadingLink href="/reports">
-                    <div className="flex items-start gap-3 text-left">
-                      <BarChart3 className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary group-hover:scale-110 transition-transform" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium group-hover:text-primary transition-colors">View Reports</div>
-                        <div className="text-xs text-muted-foreground">
-                          Access compliance reports and analytics
-                        </div>
-                      </div>
-                    </div>
-                  </LoadingLink>
-                </Button>
+                    </LoadingLink>
+                  </Button>
+                ))}
               </CardContent>
             </Card>
 
             {/* System Status */}
             <Card>
-              <CardHeader>
-                <CardTitle>System Status</CardTitle>
-                <CardDescription>Current system health</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">System Status</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium">API Service</span>
+              <CardContent className="space-y-2 pt-0">
+                {['API Service', 'AI Analysis', 'File Storage'].map((service) => (
+                  <div key={service} className="flex items-center justify-between py-1">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                      <span className="text-sm text-muted-foreground">{service}</span>
+                    </div>
+                    <span className="text-xs font-medium text-green-600 dark:text-green-400">Operational</span>
                   </div>
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400">Operational</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium">AI Analysis</span>
-                  </div>
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400">Operational</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium">File Storage</span>
-                  </div>
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400">Operational</span>
-                </div>
+                ))}
               </CardContent>
             </Card>
           </div>

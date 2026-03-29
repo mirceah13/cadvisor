@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api-client'
 import { CreditCard, Calendar, TrendingUp, CheckCircle2 } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
 import { format } from 'date-fns'
 
 interface Subscription {
@@ -61,27 +62,14 @@ export default function BillingPage() {
     fetchBillingInfo()
   }, [accessToken])
 
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case 'professional':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      case 'enterprise':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-      case 'trial':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-    }
-  }
-
   const getUsagePercentage = (used: number, limit: number) => {
     return Math.min((used / limit) * 100, 100)
   }
 
   const getUsageColor = (percentage: number) => {
-    if (percentage >= 90) return 'bg-red-500'
+    if (percentage >= 90) return 'bg-destructive'
     if (percentage >= 70) return 'bg-yellow-500'
-    return 'bg-green-500'
+    return 'bg-primary'
   }
 
   if (loading) {
@@ -90,8 +78,8 @@ export default function BillingPage() {
         <DashboardNav />
         <div className="flex-1 p-8 pt-6 container">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
+            <div className="h-8 bg-muted rounded w-1/3"></div>
+            <div className="h-32 bg-muted rounded"></div>
           </div>
         </div>
       </>
@@ -101,13 +89,11 @@ export default function BillingPage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 space-y-8 p-8 pt-6 container max-w-4xl">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Billing & Subscription</h2>
-          <p className="text-muted-foreground">
-            Manage your subscription and monitor usage
-          </p>
-        </div>
+      <div className="flex-1 space-y-6 p-8 pt-6 container max-w-4xl">
+        <PageHeader
+          title="Billing & Subscription"
+          description="Manage your subscription and monitor usage"
+        />
 
         {/* Current Plan */}
         <Card className="p-6">
@@ -115,8 +101,8 @@ export default function BillingPage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <h3 className="text-xl font-semibold">Current Plan</h3>
-                <Badge className={getPlanColor(subscription?.plan || 'trial')}>
-                  {subscription?.plan?.toUpperCase()}
+                <Badge variant="secondary">
+                  {subscription?.plan ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1) : 'Trial'}
                 </Badge>
                 {subscription?.status === 'active' && (
                   <Badge variant="outline" className="gap-1">
@@ -149,7 +135,7 @@ export default function BillingPage() {
 
         {/* Usage */}
         <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Usage This Month</h3>
+          <h3 className="text-sm font-semibold">Usage This Month</h3>
           
           <Card className="p-6">
             <div className="space-y-6">
@@ -161,7 +147,7 @@ export default function BillingPage() {
                     {usage?.projects_used || 0} / {subscription?.limits?.projects || 0}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all ${getUsageColor(
                       getUsagePercentage(
@@ -188,7 +174,7 @@ export default function BillingPage() {
                     {subscription?.limits?.submissions_per_month || 0}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all ${getUsageColor(
                       getUsagePercentage(
@@ -215,7 +201,7 @@ export default function BillingPage() {
                     {subscription?.limits?.storage_gb || 0} GB
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all ${getUsageColor(
                       getUsagePercentage(
@@ -238,7 +224,7 @@ export default function BillingPage() {
 
         {/* Billing History */}
         <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Billing History</h3>
+          <h3 className="text-sm font-semibold">Billing History</h3>
           <Card className="p-6">
             <p className="text-muted-foreground text-center py-8">
               No billing history available yet

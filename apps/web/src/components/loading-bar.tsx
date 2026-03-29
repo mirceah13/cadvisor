@@ -38,7 +38,7 @@ export function LoadingBar() {
       className="fixed top-0 left-0 right-0 h-1 z-50 transition-all duration-300 ease-out"
       style={{
         width: `${progress}%`,
-        background: 'linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899)',
+        background: '#C96442',
       }}
     />
   )

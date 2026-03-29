@@ -8,7 +8,7 @@ interface LogoProps {
 }
 
 export function Logo({ className = '', width = 40, height = 40, showText = true }: LogoProps) {
-  const primaryColor = '#6B44C2';
+  const primaryColor = '#C96442';
   
   return (
     <div className={`flex items-center gap-3 ${className}`}>

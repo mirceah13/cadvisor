@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useLoadingRouter } from '@/hooks/use-loading-router'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -79,37 +80,15 @@ export default function NewProjectPage() {
   return (
     <>
       <DashboardNav />
-      <div className="flex-1 space-y-8 p-8 pt-6 container max-w-3xl">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <LoadingLink href="/projects">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Projects
-            </LoadingLink>
-          </Button>
-        </div>
-
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Create New Project</h2>
-          <p className="text-muted-foreground">
-            Set up a new compliance project to manage your submissions
-          </p>
-        </div>
+      <div className="flex-1 p-8 pt-6 container max-w-2xl">
+        <PageHeader
+          title="Create New Project"
+          description="Set up a compliance project to manage your submissions"
+          className="mb-8"
+        />
 
         {error && (
-          <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error</h3>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-              </div>
-            </div>
-          </div>
+          <p className="text-sm text-destructive mb-4">{error}</p>
         )}
 
         <Card className="p-6">

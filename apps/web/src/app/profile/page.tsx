@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { DashboardNav } from '@/components/dashboard-nav'
+import { PageHeader } from '@/components/page-header'
 
 export default function ProfilePage() {
   const { user, isLoading } = useAuth()
@@ -17,8 +19,8 @@ export default function ProfilePage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-          <p className="mt-2 text-sm text-gray-600">Loading profile...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading profile...</p>
         </div>
       </div>
     )
@@ -30,20 +32,19 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Manage your account information and preferences
-          </p>
-        </div>
+    <>
+      <DashboardNav />
+      <div className="flex-1 space-y-6 p-8 pt-6 container max-w-3xl">
+        <PageHeader
+          title="Profile Settings"
+          description="Manage your account information and preferences"
+        />
 
         <div className="space-y-6">
           {/* Profile Information */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Personal Information</h2>
+              <h2 className="text-base font-semibold">Personal Information</h2>
               <Button
                 variant={isEditing ? 'default' : 'outline'}
                 onClick={() => isEditing ? handleSave() : setIsEditing(true)}
@@ -54,7 +55,7 @@ export default function ProfilePage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Full Name
                 </label>
                 {isEditing ? (
@@ -62,46 +63,46 @@ export default function ProfilePage() {
                     type="text"
                     value={formData.fullName}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                   />
                 ) : (
-                  <p className="text-sm text-gray-900">{user?.name}</p>
+                  <p className="text-sm text-foreground">{user?.name}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Email Address
                 </label>
-                <p className="text-sm text-gray-900">{user?.email}</p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="text-sm text-foreground">{user?.email}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Contact support to change your email address
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Role
                 </label>
-                <p className="text-sm text-gray-900 capitalize">{user?.role}</p>
+                <p className="text-sm text-foreground capitalize">{user?.role}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Organization ID
                 </label>
-                <p className="text-sm text-gray-900">{user?.organizationId}</p>
+                <p className="text-sm text-foreground">{user?.organizationId}</p>
               </div>
             </div>
           </Card>
 
           {/* Security Settings */}
           <Card className="p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Security</h2>
-            
+            <h2 className="text-base font-semibold mb-4">Security</h2>
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Password
                 </label>
                 <Button variant="outline" asChild>
@@ -110,10 +111,10 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Two-Factor Authentication
                 </label>
-                <p className="text-sm text-gray-500 mb-2">
+                <p className="text-sm text-muted-foreground mb-2">
                   Add an extra layer of security to your account
                 </p>
                 <Button variant="outline" disabled>
@@ -125,15 +126,15 @@ export default function ProfilePage() {
 
           {/* Account Actions */}
           <Card className="p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Actions</h2>
-            
+            <h2 className="text-base font-semibold mb-4">Account Actions</h2>
+
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-1">Delete Account</h3>
-                <p className="text-sm text-gray-500 mb-2">
+                <h3 className="text-sm font-medium mb-1">Delete Account</h3>
+                <p className="text-sm text-muted-foreground mb-2">
                   Permanently delete your account and all associated data
                 </p>
-                <Button variant="outline" className="text-red-600 border-red-600 hover:bg-red-50">
+                <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10">
                   Delete Account
                 </Button>
               </div>
@@ -141,6 +142,6 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
-    </div>
+    </>
   )
 }

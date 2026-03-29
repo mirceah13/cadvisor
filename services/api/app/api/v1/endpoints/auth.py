@@ -197,17 +197,17 @@ def _user_payload(user: User, org_member: OrgMember) -> dict:
 # ---------------------------------------------------------------------------
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(f"{settings.RATE_LIMIT_AUTH_PER_MINUTE}/minute")
-async def register(http_request: Request, request: SignupRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def register(request: Request, body: SignupRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Create a new user account with organization."""
-    if db.query(User).filter(User.email == request.email).first():
+    if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
 
     organization = Organization(
-        name=request.organization_name,
-        slug=slugify(request.organization_name),
+        name=body.organization_name,
+        slug=slugify(body.organization_name),
     )
     db.add(organization)
     db.flush()
@@ -230,9 +230,9 @@ async def register(http_request: Request, request: SignupRequest, background_tas
 
     verify_token = secrets.token_urlsafe(32)
     user = User(
-        email=request.email,
-        password_hash=get_password_hash(request.password),
-        name=request.full_name,
+        email=body.email,
+        password_hash=get_password_hash(body.password),
+        name=body.full_name,
         is_active=True,
         email_verified=False,
         email_verify_token=verify_token,
@@ -266,13 +266,13 @@ async def register(http_request: Request, request: SignupRequest, background_tas
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(f"{settings.RATE_LIMIT_AUTH_PER_MINUTE}/minute")
-async def login(http_request: Request, request: LoginRequest, db: Session = Depends(get_db)):
+async def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     """Login with email and password."""
-    _check_lockout(request.email)
+    _check_lockout(body.email)
 
-    user = db.query(User).filter(User.email == request.email).first()
-    if not user or not verify_password(request.password, user.password_hash):
-        _record_failed_attempt(request.email)
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user or not verify_password(body.password, user.password_hash):
+        _record_failed_attempt(body.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -294,7 +294,7 @@ async def login(http_request: Request, request: LoginRequest, db: Session = Depe
             detail="Invalid email or password",
         )
 
-    _clear_failed_attempts(request.email)
+    _clear_failed_attempts(body.email)
     user.last_login_at = datetime.utcnow()
     db.commit()
 

@@ -480,215 +480,193 @@ export function FileDetailsTab({ profile, files, initialFileId }: FileDetailsTab
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Info className="h-5 w-5" />
-                  CAD File Overview
-                </CardTitle>
-                <CardDescription>
-                  Key metrics and metadata from {selectedFile?.filename}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* File Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {/* File Size */}
-                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-blue-800/50 bg-gradient-to-b from-blue-950/50 to-blue-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)] dark:from-blue-950/50 dark:to-blue-950/80">
-                    <div className="p-1.5 rounded-md bg-blue-500/20 shrink-0">
-                      <FileText className="h-4 w-4 text-blue-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-base font-bold leading-none text-blue-100 truncate">
-                        {selectedFile?.size_bytes
-                          ? (selectedFile.size_bytes / 1024 / 1024).toFixed(2)
-                          : selectedFile?.size
-                            ? (selectedFile.size / 1024 / 1024).toFixed(2)
-                            : '?'} MB
-                      </p>
-                      <p className="text-[11px] text-blue-400/80 mt-1">File Size</p>
-                    </div>
-                  </div>
+            {/* Processing status */}
+            {metadata.processing_status === 'completed' ? (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg border border-green-500/20 bg-green-500/5 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                <span className="font-medium text-green-700 dark:text-green-400">Processing complete</span>
+                {metadata.processing_started_at && metadata.processing_completed_at && (
+                  <span className="text-muted-foreground">
+                    · Completed in {((new Date(metadata.processing_completed_at).getTime() - new Date(metadata.processing_started_at).getTime()) / 1000).toFixed(1)}s
+                  </span>
+                )}
+                {(metadata.source_format || metadata.dxf_version) && (
+                  <span className="text-muted-foreground ml-auto font-mono text-xs uppercase">
+                    {metadata.source_format || 'DWG'}{metadata.dxf_version ? ` · ${metadata.dxf_version}` : ''}
+                  </span>
+                )}
+              </div>
+            ) : metadata.processing_status === 'partial' ? (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg border border-yellow-500/20 bg-yellow-500/5 text-sm">
+                <AlertCircle className="h-4 w-4 text-yellow-500 shrink-0" />
+                <span className="font-medium text-yellow-700 dark:text-yellow-400">Partial parse</span>
+                <span className="text-muted-foreground">· Some content was extracted; analysis can proceed</span>
+              </div>
+            ) : metadata.processing_status === 'failed' ? (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg border border-destructive/20 bg-destructive/5 text-sm">
+                <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                <span className="font-medium text-destructive">Processing failed</span>
+                {metadata.error && <span className="text-muted-foreground truncate">· {metadata.error}</span>}
+              </div>
+            ) : null}
 
-                  {/* Format/Version */}
-                  {(metadata.dxf_version || metadata.file_schema || metadata.source_format) && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-purple-800/50 bg-gradient-to-b from-purple-950/50 to-purple-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <div className="p-1.5 rounded-md bg-purple-500/20 shrink-0">
-                        <Calculator className="h-4 w-4 text-purple-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-base font-bold leading-none text-purple-100 truncate">
-                          {metadata.dxf_version || metadata.file_schema || metadata.source_format?.toUpperCase()}
-                        </p>
-                        <p className="text-[11px] text-purple-400/80 mt-1">Format</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Entities/Elements */}
-                  {(metadata.entities?.total || metadata.elements?.total_count) && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-green-800/50 bg-gradient-to-b from-green-950/50 to-green-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <div className="p-1.5 rounded-md bg-green-500/20 shrink-0">
-                        <Box className="h-4 w-4 text-green-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-base font-bold leading-none text-green-100 truncate">
-                          {(metadata.entities?.total || metadata.elements?.total_count || 0).toLocaleString()}
-                        </p>
-                        <p className="text-[11px] text-green-400/80 mt-1">Entities</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Rooms */}
-                  {metadata.rooms?.count > 0 && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-teal-800/50 bg-gradient-to-b from-teal-950/50 to-teal-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <div className="p-1.5 rounded-md bg-teal-500/20 shrink-0">
-                        <Sofa className="h-4 w-4 text-teal-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-base font-bold leading-none text-teal-100 truncate">
-                          {metadata.rooms.count}
-                        </p>
-                        <p className="text-[11px] text-teal-400/80 mt-1">Rooms</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fire Elements */}
-                  {metadata.fire_elements?.count > 0 && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-red-800/50 bg-gradient-to-b from-red-950/50 to-red-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <div className="p-1.5 rounded-md bg-red-500/20 shrink-0">
-                        <Flame className="h-4 w-4 text-red-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-base font-bold leading-none text-red-100 truncate">
-                          {metadata.fire_elements.count}
-                        </p>
-                        <p className="text-[11px] text-red-400/80 mt-1">Fire Specs</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Layers/Storeys */}
-                  {(metadata.layers?.count || metadata.storeys?.count) && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-orange-800/50 bg-gradient-to-b from-orange-950/50 to-orange-950/80 shadow-[0_2px_0_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <div className="p-1.5 rounded-md bg-orange-500/20 shrink-0">
-                        <Layers className="h-4 w-4 text-orange-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-base font-bold leading-none text-orange-100 truncate">
-                          {metadata.layers?.count || metadata.storeys?.count || 0}
-                        </p>
-                        <p className="text-[11px] text-orange-400/80 mt-1">
-                          {metadata.layers?.count ? 'Layers' : 'Storeys'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+            {/* Key metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border rounded-xl overflow-hidden border">
+              {/* File Size — always shown */}
+              <div className="bg-card px-4 py-4 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="text-xs">File Size</span>
                 </div>
+                <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                  {selectedFile?.size_bytes
+                    ? (selectedFile.size_bytes / 1024 / 1024).toFixed(2)
+                    : selectedFile?.size
+                      ? (selectedFile.size / 1024 / 1024).toFixed(2)
+                      : '?'}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">MB</span>
+                </p>
+              </div>
 
-                {/* Entity Breakdown - DWG/DXF */}
-                {metadata.entities?.by_type && Object.keys(metadata.entities.by_type).length > 0 && (
-                  <div>
-                    <h3 className="font-semibold mb-3 flex items-center gap-2">
-                      <Grid className="h-4 w-4" />
-                      Entity Types Breakdown
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {Object.entries(metadata.entities.by_type)
-                        .sort(([, a]: any, [, b]: any) => b - a)
-                        .slice(0, 9)
-                        .map(([type, count]: [string, any]) => (
-                          <div key={type} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
-                            <span className="text-sm font-medium capitalize text-foreground">
-                              {type.replace(/_/g, ' ')}
-                            </span>
-                            <Badge variant="secondary">{count}</Badge>
-                          </div>
-                        ))}
-                    </div>
+              {/* Format/Version */}
+              {(metadata.dxf_version || metadata.file_schema || metadata.source_format) && (
+                <div className="bg-card px-4 py-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Calculator className="h-3.5 w-3.5" />
+                    <span className="text-xs">Format</span>
                   </div>
-                )}
-
-                {/* Processing Status */}
-                <div className="p-4 border-2 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-500/20 rounded-full">
-                      <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-green-900 dark:text-green-100">
-                        Processing Complete
-                      </p>
-                      <p className="text-sm text-green-700 dark:text-green-300">
-                        {metadata.processing_started_at && metadata.processing_completed_at ? (
-                          `Completed in ${((new Date(metadata.processing_completed_at).getTime() - new Date(metadata.processing_started_at).getTime()) / 1000).toFixed(1)}s`
-                        ) : (
-                          'File successfully parsed and ready for analysis'
-                        )}
-                      </p>
-                    </div>
-                  </div>
+                  <p className="text-2xl font-semibold tracking-tight truncate">
+                    {metadata.dxf_version || metadata.file_schema || metadata.source_format?.toUpperCase()}
+                  </p>
                 </div>
+              )}
 
-                {/* DXF/DWG Metadata */}
-                {metadata.dxf_version && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold">Additional DWG/DXF Details</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {metadata.blocks?.count && (
-                        <div className="p-3 border rounded-lg bg-card">
-                          <p className="text-sm text-muted-foreground">Blocks</p>
-                          <p className="text-lg font-bold text-foreground">{metadata.blocks.count}</p>
-                        </div>
-                      )}
-                      {metadata.text?.count && (
-                        <div className="p-3 border rounded-lg bg-card">
-                          <p className="text-sm text-muted-foreground">Text Objects</p>
-                          <p className="text-lg font-bold text-foreground">{metadata.text.count}</p>
-                        </div>
-                      )}
-                    </div>
+              {/* Entities/Elements */}
+              {(metadata.entities?.total || metadata.elements?.total_count) ? (
+                <div className="bg-card px-4 py-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Box className="h-3.5 w-3.5" />
+                    <span className="text-xs">Entities</span>
                   </div>
-                )}
+                  <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                    {(metadata.entities?.total || metadata.elements?.total_count || 0).toLocaleString()}
+                  </p>
+                </div>
+              ) : null}
 
-                {/* IFC Metadata */}
-                {metadata.file_schema && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold">IFC Model Details</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {metadata.spaces?.count && (
-                        <div className="p-3 border rounded-lg bg-card">
-                          <p className="text-sm text-muted-foreground">Spaces</p>
-                          <p className="text-lg font-bold text-foreground">{metadata.spaces.count}</p>
-                        </div>
-                      )}
-                      {metadata.building?.name && (
-                        <div className="p-3 border rounded-lg bg-card">
-                          <p className="text-sm text-muted-foreground">Building Name</p>
-                          <p className="text-base font-semibold text-foreground truncate">{metadata.building.name}</p>
-                        </div>
-                      )}
-                    </div>
+              {/* Rooms */}
+              {metadata.rooms?.count > 0 && (
+                <div className="bg-card px-4 py-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Sofa className="h-3.5 w-3.5" />
+                    <span className="text-xs">Rooms</span>
                   </div>
-                )}
+                  <p className="text-2xl font-semibold tracking-tight tabular-nums">{metadata.rooms.count}</p>
+                </div>
+              )}
 
-                {/* Error State */}
-                {metadata.error && (
-                  <div className="p-4 border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                      <p className="text-sm font-semibold text-red-900 dark:text-red-100">Processing Error</p>
-                    </div>
-                    <p className="text-sm text-red-700 dark:text-red-300">{metadata.error}</p>
-                    {metadata.message && (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-2">{metadata.message}</p>
-                    )}
+              {/* Fire Elements */}
+              {metadata.fire_elements?.count > 0 && (
+                <div className="bg-card px-4 py-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Flame className="h-3.5 w-3.5" />
+                    <span className="text-xs">Fire Specs</span>
                   </div>
+                  <p className="text-2xl font-semibold tracking-tight tabular-nums">{metadata.fire_elements.count}</p>
+                </div>
+              )}
+
+              {/* Layers/Storeys */}
+              {(metadata.layers?.count || metadata.storeys?.count) ? (
+                <div className="bg-card px-4 py-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Layers className="h-3.5 w-3.5" />
+                    <span className="text-xs">{metadata.layers?.count ? 'Layers' : 'Storeys'}</span>
+                  </div>
+                  <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                    {metadata.layers?.count || metadata.storeys?.count || 0}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Entity breakdown */}
+            {metadata.entities?.by_type && Object.keys(metadata.entities.by_type).length > 0 && (
+              <div className="rounded-xl border overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
+                  <Grid className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Entity breakdown</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 divide-y md:divide-y-0 divide-border">
+                  {Object.entries(metadata.entities.by_type)
+                    .sort(([, a]: any, [, b]: any) => b - a)
+                    .slice(0, 9)
+                    .map(([type, count]: [string, any], i) => (
+                      <div
+                        key={type}
+                        className={`flex items-center justify-between px-4 py-2.5 bg-card hover:bg-muted/40 transition-colors
+                          ${i > 0 && i % 3 !== 0 ? 'border-l border-border' : ''}
+                          ${i >= 3 ? 'border-t border-border' : ''}`}
+                      >
+                        <span className="text-sm text-muted-foreground capitalize">
+                          {type.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums">{Number(count).toLocaleString()}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* DXF extra counters (Blocks, Text) */}
+            {metadata.dxf_version && (metadata.blocks?.count || metadata.text?.count) && (
+              <div className="grid grid-cols-2 gap-3">
+                {metadata.blocks?.count ? (
+                  <div className="rounded-lg border bg-card px-4 py-4 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Blocks</p>
+                    <p className="text-2xl font-semibold tabular-nums">{metadata.blocks.count}</p>
+                  </div>
+                ) : null}
+                {metadata.text?.count ? (
+                  <div className="rounded-lg border bg-card px-4 py-4 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Text Objects</p>
+                    <p className="text-2xl font-semibold tabular-nums">{metadata.text.count}</p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* IFC extra info */}
+            {metadata.file_schema && (metadata.spaces?.count || metadata.building?.name) && (
+              <div className="grid grid-cols-2 gap-3">
+                {metadata.spaces?.count ? (
+                  <div className="rounded-lg border bg-card px-4 py-4 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Spaces</p>
+                    <p className="text-2xl font-semibold tabular-nums">{metadata.spaces.count}</p>
+                  </div>
+                ) : null}
+                {metadata.building?.name ? (
+                  <div className="rounded-lg border bg-card px-4 py-4 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Building Name</p>
+                    <p className="text-base font-semibold truncate">{metadata.building.name}</p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* Error detail */}
+            {metadata.error && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                  <p className="text-sm font-medium">Processing Error</p>
+                </div>
+                <p className="text-sm text-muted-foreground">{metadata.error}</p>
+                {metadata.message && (
+                  <p className="text-xs text-muted-foreground mt-1">{metadata.message}</p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            )}
           </TabsContent>
 
           {/* Building Tab */}

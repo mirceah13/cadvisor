@@ -82,15 +82,7 @@ class VisualEmbeddingService:
         self,
         image_path: str
     ) -> Optional[List[float]]:
-        """
-        Generate embedding from image file path.
-
-        Args:
-            image_path: Path to image file
-
-        Returns:
-            Visual embedding vector or None on failure
-        """
+        """Generate embedding from image file path."""
         try:
             with open(image_path, "rb") as f:
                 image_data = f.read()
@@ -98,3 +90,45 @@ class VisualEmbeddingService:
         except Exception as e:
             logger.error(f"Error reading image for embedding {image_path}: {e}", exc_info=True)
             return None
+
+    def generate_text_embedding(self, text: str) -> Optional[List[float]]:
+        """
+        Generate a CLIP embedding from *text* using Jina CLIP.
+
+        Jina CLIP (jina-clip-v1) is multimodal: text and images share the same
+        768-dimensional embedding space, so a text query can be compared directly
+        against stored image visual_embeddings via cosine similarity.
+        """
+        if not self.api_key:
+            logger.warning("JINA_API_KEY not set — cannot generate CLIP text embedding")
+            return None
+        if not text or not text.strip():
+            return None
+
+        for attempt in range(JINA_MAX_RETRIES):
+            try:
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.post(
+                        JINA_CLIP_URL,
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": JINA_CLIP_MODEL,
+                            "input": [{"text": text}],
+                        },
+                    )
+                    if response.status_code == 429:
+                        wait = float(response.headers.get("Retry-After", JINA_RETRY_BASE_DELAY * (2 ** attempt)))
+                        logger.warning(f"Jina CLIP text embed 429, waiting {wait:.1f}s (attempt {attempt + 1})")
+                        time.sleep(wait)
+                        continue
+                    response.raise_for_status()
+                    return response.json()["data"][0]["embedding"]
+            except Exception as e:
+                logger.error(f"Error generating CLIP text embedding (attempt {attempt + 1}): {e}", exc_info=True)
+                if attempt < JINA_MAX_RETRIES - 1:
+                    time.sleep(JINA_RETRY_BASE_DELAY * (2 ** attempt))
+
+        return None

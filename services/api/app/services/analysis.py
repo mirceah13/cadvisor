@@ -241,31 +241,43 @@ class AnalysisEngine:
             category=self._get_category_for_check(check_type),
             min_similarity=0.5
         )
-        
+
         logger.info(f"Retrieved {len(context_chunks)} context chunks for {check_type}")
-        
+
+        # Retrieve relevant diagrams / figures from the knowledge base images
+        image_context = await self.kb_service.semantic_search_images(
+            query=query,
+            org_id=org_id,
+            limit=4,
+            category=self._get_category_for_check(check_type),
+            min_similarity=0.4,
+        )
+
+        logger.info(f"Retrieved {len(image_context)} relevant images for {check_type}")
+
         # Update progress: KB retrieval complete (30% of this check)
         if progress_callback:
             progress_callback(30)
-        
+
         # Run LLM analysis
         analysis_result = await self.llm_service.analyze_compliance(
             submission_profile=profile,
             check_type=check_type,
-            context_chunks=context_chunks
+            context_chunks=context_chunks,
+            image_context=image_context,
         )
-        
+
         if not analysis_result.get("success"):
             logger.error(f"Check {check_type} failed: {analysis_result.get('error')}")
             return []
-        
+
         # Update progress: LLM analysis complete (80% of this check)
         if progress_callback:
             progress_callback(80)
-        
+
         # Create finding records
         findings = []
-        
+
         for finding_data in analysis_result.get("findings", []):
             finding = Finding(
                 analysis_run_id=analysis_run_id,
@@ -283,16 +295,26 @@ class AnalysisEngine:
                         c.get("source", {}).get("title", "Unknown")
                         for c in context_chunks
                     ],
-                    "raw_analysis": analysis_result.get("raw_response", "")[:1000]
+                    "image_references": [
+                        {
+                            "image_index": img.get("image_index"),
+                            "source": img.get("source", {}).get("title", "Unknown"),
+                            "similarity": round(img.get("similarity", 0), 3),
+                            "ocr_excerpt": (img.get("ocr_text") or "")[:200],
+                            "url": img.get("presigned_url"),
+                        }
+                        for img in image_context
+                    ],
+                    "raw_analysis": analysis_result.get("raw_response", "")[:1000],
                 },
-                status="pending"
+                status="pending",
             )
-            
+
             self.db.add(finding)
             findings.append(finding)
-        
+
         self.db.commit()
-        
+
         logger.info(f"Created {len(findings)} findings for {check_type}")
         return findings
     
@@ -336,7 +358,7 @@ class AnalysisEngine:
             category="fire_safety",
             min_similarity=0.5
         )
-        
+
         # Also search for fire resistance specifically
         resistance_query = "fire resistance REI EI ratings requirements structural elements walls floors"
         resistance_context = await self.kb_service.semantic_search(
@@ -346,26 +368,56 @@ class AnalysisEngine:
             category="fire_safety",
             min_similarity=0.5
         )
-        
-        # Combine context
+
+        # Combine text context
         all_context = context_chunks + resistance_context
-        
+
+        # Visual RAG: find relevant diagrams (fire compartmentation plans, escape routes, etc.)
+        image_context = await self.kb_service.semantic_search_images(
+            query=query,
+            org_id=org_id,
+            limit=6,
+            category="fire_safety",
+            min_similarity=0.4,
+        )
+
+        # Also search images for fire resistance / structural elements
+        resistance_image_context = await self.kb_service.semantic_search_images(
+            query=resistance_query,
+            org_id=org_id,
+            limit=4,
+            category="fire_safety",
+            min_similarity=0.4,
+        )
+
+        # Deduplicate images by image_id
+        seen_ids: set = set()
+        all_image_context = []
+        for img in image_context + resistance_image_context:
+            if img["image_id"] not in seen_ids:
+                seen_ids.add(img["image_id"])
+                all_image_context.append(img)
+
+        logger.info(
+            f"Fire safety: {len(all_context)} text chunks + {len(all_image_context)} images retrieved"
+        )
+
         if progress_callback:
             progress_callback(40)
-        
+
         # Run specialized fire safety analysis
         fire_analysis = self.fire_safety_analyzer.analyze_fire_safety(
             submission_profile=profile,
             cad_files_metadata=cad_files_metadata,
-            kb_context=all_context
+            kb_context=all_context,
         )
-        
+
         if progress_callback:
             progress_callback(70)
-        
+
         # Create finding records from fire safety analysis
         findings = []
-        
+
         for finding_data in fire_analysis.get("findings", []):
             finding = Finding(
                 analysis_run_id=analysis_run_id,
@@ -382,14 +434,24 @@ class AnalysisEngine:
                     "fire_safety_analysis": {
                         "legend_analysis": fire_analysis.get("legend_analysis", []),
                         "checks_performed": fire_analysis.get("checks_performed", []),
-                        "compliance_summary": fire_analysis.get("compliance_summary", {})
+                        "compliance_summary": fire_analysis.get("compliance_summary", {}),
                     },
                     "context_sources": [
                         c.get("source", {}).get("title", "Unknown")
                         for c in all_context[:5]
-                    ]
+                    ],
+                    "image_references": [
+                        {
+                            "image_index": img.get("image_index"),
+                            "source": img.get("source", {}).get("title", "Unknown"),
+                            "similarity": round(img.get("similarity", 0), 3),
+                            "ocr_excerpt": (img.get("ocr_text") or "")[:200],
+                            "url": img.get("presigned_url"),
+                        }
+                        for img in all_image_context
+                    ],
                 },
-                status="pending"
+                status="pending",
             )
             
             self.db.add(finding)

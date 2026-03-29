@@ -14,6 +14,7 @@ from app.models import KnowledgeSource, KBChunk
 from app.services.storage import StorageService
 from app.services.chunking import ChunkingService, ChunkingStrategy
 from app.services.embeddings import EmbeddingService
+from app.services.visual_embeddings import VisualEmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class KnowledgeBaseService:
         self.db = db
         self.storage = StorageService()
         self.embedding_service = EmbeddingService()
+        self.visual_embedding_service = VisualEmbeddingService()
     
     async def ingest_document(
         self,
@@ -238,7 +240,98 @@ class KnowledgeBaseService:
         
         logger.info(f"Found {len(formatted_results)} results for query: {query[:50]}...")
         return formatted_results
-    
+
+    async def semantic_search_images(
+        self,
+        query: str,
+        org_id: UUID,
+        limit: int = 5,
+        category: Optional[str] = None,
+        min_similarity: float = 0.4,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search knowledge base images by semantic similarity.
+
+        Uses Jina CLIP to embed the *text* query into the same 768-dim space
+        as the stored visual embeddings, then finds the most similar diagrams /
+        figures via cosine distance in pgvector.
+
+        Returns a list of matching images with OCR text, similarity score,
+        source metadata, and a short-lived presigned URL for the image.
+        """
+        from app.models import KBImage
+
+        # Embed query text using Jina CLIP (multimodal — text and image share the
+        # same embedding space, so a text query can retrieve similar images).
+        query_embedding = self.visual_embedding_service.generate_text_embedding(query)
+        if not query_embedding:
+            logger.warning("Could not generate visual query embedding; skipping image search")
+            return []
+
+        similarity_expr = (1 - KBImage.visual_embedding.cosine_distance(query_embedding))
+
+        q = (
+            self.db.query(
+                KBImage.id,
+                KBImage.storage_key,
+                KBImage.ocr_text,
+                KBImage.ocr_confidence,
+                KBImage.image_index,
+                KBImage.format,
+                KBImage.width,
+                KBImage.height,
+                KBImage.image_metadata,
+                KnowledgeSource.title,
+                KnowledgeSource.category,
+                similarity_expr.label("similarity"),
+            )
+            .join(KnowledgeSource, KBImage.knowledge_source_id == KnowledgeSource.id)
+            .filter(
+                KnowledgeSource.org_id == org_id,
+                KnowledgeSource.status == "indexed",
+                KBImage.visual_embedding.isnot(None),
+                similarity_expr >= min_similarity,
+            )
+        )
+
+        if category:
+            q = q.filter(KnowledgeSource.category == category)
+
+        rows = q.order_by(similarity_expr.desc()).limit(limit).all()
+
+        results = []
+        for row in rows:
+            # Best-effort presigned URL — non-fatal if storage is unreachable
+            presigned_url = None
+            try:
+                presigned_url = self.storage.generate_download_url(row.storage_key, expires_minutes=60)
+            except Exception:
+                pass
+
+            ocr = (row.ocr_text or "").strip()
+            results.append({
+                "image_id": str(row.id),
+                "similarity": float(row.similarity),
+                "ocr_text": ocr,
+                "has_text": bool(ocr),
+                "image_index": row.image_index,
+                "format": row.format,
+                "width": row.width,
+                "height": row.height,
+                "presigned_url": presigned_url,
+                "metadata": row.image_metadata or {},
+                "source": {
+                    "title": row.title,
+                    "category": row.category,
+                },
+            })
+
+        logger.info(
+            f"Image search: {len(results)} matches for query '{query[:60]}' "
+            f"(org={org_id}, category={category})"
+        )
+        return results
+
     def create_knowledge_source(
         self,
         org_id: UUID,

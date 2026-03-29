@@ -114,9 +114,9 @@ class EmbeddingService:
                     break
 
             all_embeddings.extend(batch_result)
-            # Small pause between batches to avoid triggering rate limits
+            # Pause between batches to stay under Jina free-tier rate limits
             if i + batch_size < len(texts):
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(2.0)
 
         return all_embeddings
 

@@ -97,51 +97,52 @@ class KnowledgeBaseService:
         flag_modified(source, "meta_data")
         self.db.commit()
         self.db.refresh(source)
-        
-        # Generate ALL embeddings in batches (one HTTP call per 100 chunks)
-        all_texts = [chunk.text for chunk in chunks]
-        all_embeddings = await self.embedding_service.generate_embeddings_batch(all_texts)
-        
-        # Store chunks with their embeddings
+
+        # Embed and save in batches so the progress bar advances in real time.
+        # Each iteration: call Jina for one batch → save those chunks → commit → update %
+        EMBED_BATCH = 50
         chunks_created = 0
         total_chunks = len(chunks)
-        
-        for i, (chunk, embedding) in enumerate(zip(chunks, all_embeddings)):
-            if not embedding:
-                logger.warning(f"Failed to generate embedding for chunk {chunk.chunk_index}")
-                continue
-            
-            # Create chunk record
-            kb_chunk = KBChunk(
-                knowledge_source_id=source_id,
-                org_id=source.org_id,
-                chunk_index=chunk.chunk_index,
-                chunk_text=chunk.text,
-                embedding=embedding,
-                chunk_metadata={
-                    **chunk.metadata,
-                    "start_char": chunk.start_char,
-                    "end_char": chunk.end_char,
-                    "length": len(chunk.text)
-                }
+
+        for batch_start in range(0, total_chunks, EMBED_BATCH):
+            batch_chunks = chunks[batch_start: batch_start + EMBED_BATCH]
+            batch_texts = [c.text for c in batch_chunks]
+
+            batch_embeddings = await self.embedding_service.generate_embeddings_batch(
+                batch_texts, batch_size=EMBED_BATCH
             )
-            
-            self.db.add(kb_chunk)
-            chunks_created += 1
-            
-            # Update progress every 50 chunks or on last chunk
-            if (i + 1) % 50 == 0 or (i + 1) == total_chunks:
-                current_progress = source.meta_data.get("progress", {}).get("processed_chunks", 0)
-                if (i + 1) > current_progress:
-                    source.meta_data["progress"] = {
-                        "stage": "embedding",
-                        "total_chunks": total_chunks,
-                        "processed_chunks": i + 1,
-                        "message": f"Processing chunk {i + 1} of {total_chunks}..."
+
+            for chunk, embedding in zip(batch_chunks, batch_embeddings):
+                if not embedding:
+                    logger.warning(f"Failed to generate embedding for chunk {chunk.chunk_index}")
+                    continue
+                kb_chunk = KBChunk(
+                    knowledge_source_id=source_id,
+                    org_id=source.org_id,
+                    chunk_index=chunk.chunk_index,
+                    chunk_text=chunk.text,
+                    embedding=embedding,
+                    chunk_metadata={
+                        **chunk.metadata,
+                        "start_char": chunk.start_char,
+                        "end_char": chunk.end_char,
+                        "length": len(chunk.text)
                     }
-                    flag_modified(source, "meta_data")
-                    self.db.commit()
-                    self.db.refresh(source)
+                )
+                self.db.add(kb_chunk)
+                chunks_created += 1
+
+            processed_so_far = min(batch_start + EMBED_BATCH, total_chunks)
+            source.meta_data["progress"] = {
+                "stage": "embedding",
+                "total_chunks": total_chunks,
+                "processed_chunks": processed_so_far,
+                "message": f"Embedded {processed_so_far} of {total_chunks} chunks..."
+            }
+            flag_modified(source, "meta_data")
+            self.db.commit()
+            self.db.refresh(source)
+            logger.info(f"Progress: {processed_so_far}/{total_chunks} chunks embedded for {source_id}")
         
         # Update source status
         source.status = "indexed"

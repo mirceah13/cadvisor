@@ -103,7 +103,7 @@ export default function KnowledgeBaseDetailPage() {
     if (source?.status === 'processing') {
       const interval = setInterval(() => {
         fetchSource(false) // Silent update, no loading state
-      }, 3000) // Poll every 3 seconds
+      }, 2000) // Poll every 2 seconds
 
       return () => clearInterval(interval)
     }
@@ -335,69 +335,69 @@ export default function KnowledgeBaseDetailPage() {
             <CardContent className="pt-6">
               <div className="space-y-6">
             {/* Processing Progress */}
-            {source.status === 'processing' && source.meta_data?.progress && (
-              <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-200">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                      <span>Processing Document</span>
-                    </div>
-                    <Badge variant="outline" className="bg-white dark:bg-gray-900 font-mono text-lg px-3 py-1">
-                      {source.meta_data.progress.total_chunks 
-                        ? `${Math.round(((source.meta_data.progress.processed_chunks || 0) / source.meta_data.progress.total_chunks) * 100)}%`
-                        : '0%'
-                      }
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    {/* Stage and Chunk Count */}
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="font-medium capitalize text-blue-900 dark:text-blue-100">
-                        {source.meta_data.progress.stage === 'downloading' && '📥 Downloading'}
-                        {source.meta_data.progress.stage === 'chunking' && '✂️ Chunking'}
-                        {source.meta_data.progress.stage === 'embedding' && '🧠 Generating Embeddings'}
-                        {source.meta_data.progress.stage === 'complete' && '✅ Complete'}
-                        {!source.meta_data.progress.stage && 'Processing...'}
-                      </span>
-                      {source.meta_data.progress.total_chunks && (
-                        <span className="text-muted-foreground font-mono">
-                          {source.meta_data.progress.processed_chunks || 0} / {source.meta_data.progress.total_chunks} chunks
+            {source.status === 'processing' && (() => {
+              const prog = source.meta_data?.progress
+              const total = prog?.total_chunks ?? 0
+              const done = prog?.processed_chunks ?? 0
+              const pct = total > 0 ? Math.round((done / total) * 100) : null
+              const stage = prog?.stage
+              const isIndeterminate = !total || done === 0
+              return (
+                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-200">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                        <span>Processing Document</span>
+                      </div>
+                      <Badge variant="outline" className="bg-white dark:bg-gray-900 font-mono text-lg px-3 py-1">
+                        {pct !== null ? `${pct}%` : '…'}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      {/* Stage and chunk count */}
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="font-medium text-blue-900 dark:text-blue-100">
+                          {stage === 'downloading' && '📥 Downloading'}
+                          {stage === 'chunking' && '✂️ Chunking text'}
+                          {stage === 'embedding' && '🧠 Generating Embeddings'}
+                          {stage === 'complete' && '✅ Complete'}
+                          {!stage && '⏳ Starting up…'}
                         </span>
-                      )}
-                    </div>
-                    
-                    {/* Progress Bar */}
-                    {source.meta_data.progress.total_chunks ? (
-                      <div className="relative">
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden shadow-inner">
-                          <div 
-                            className="bg-gradient-to-r from-blue-500 to-indigo-600 h-4 rounded-full transition-all duration-500 ease-out relative overflow-hidden"
-                            style={{ 
-                              width: `${Math.min(((source.meta_data.progress.processed_chunks || 0) / source.meta_data.progress.total_chunks) * 100, 100)}%` 
-                            }}
+                        {total > 0 && (
+                          <span className="text-muted-foreground font-mono tabular-nums">
+                            {done} / {total} chunks
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Progress bar: determinate or indeterminate */}
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden shadow-inner">
+                        {isIndeterminate ? (
+                          <div className="h-4 w-full relative overflow-hidden rounded-full">
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 animate-[indeterminate_1.5s_ease-in-out_infinite]" />
+                          </div>
+                        ) : (
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-indigo-600 h-4 rounded-full transition-[width] duration-700 ease-out relative overflow-hidden"
+                            style={{ width: `${Math.min(pct!, 100)}%` }}
                           >
-                            {/* Animated shine effect */}
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
                           </div>
-                        </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div className="bg-blue-600 h-4 rounded-full animate-pulse w-1/3" />
-                      </div>
-                    )}
-                    
-                    {/* Status Message */}
-                    <p className="text-sm text-muted-foreground italic">
-                      {source.meta_data.progress.message || 'Processing document...'}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+
+                      {/* Status message */}
+                      <p className="text-sm text-muted-foreground italic">
+                        {prog?.message || 'Preparing document…'}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
 
             {/* Statistics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

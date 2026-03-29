@@ -123,6 +123,7 @@ class OCRService:
         Returns:
             Preprocessed image
         """
+        import cv2
         # Convert to grayscale
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

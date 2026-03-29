@@ -6,6 +6,7 @@ No local GPU or model download required — identical approach to text embedding
 
 import base64
 import logging
+import time
 from typing import List, Optional
 
 import httpx
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 JINA_CLIP_URL = "https://api.jina.ai/v1/embeddings"
 JINA_CLIP_MODEL = "jina-clip-v1"   # 768 dims, multimodal (text + image)
 JINA_CLIP_DIMENSION = 768
+JINA_MAX_RETRIES = 5
+JINA_RETRY_BASE_DELAY = 2.0  # seconds
 
 
 class VisualEmbeddingService:
@@ -45,21 +48,32 @@ class VisualEmbeddingService:
 
         try:
             encoded = base64.b64encode(image_data).decode("utf-8")
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    JINA_CLIP_URL,
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": JINA_CLIP_MODEL,
-                        "input": [{"image": encoded}],
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-            return data["data"][0]["embedding"]
+            for attempt in range(JINA_MAX_RETRIES):
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.post(
+                        JINA_CLIP_URL,
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": JINA_CLIP_MODEL,
+                            "input": [{"image": encoded}],
+                        },
+                    )
+
+                    if response.status_code == 429:
+                        retry_after = float(response.headers.get("Retry-After", JINA_RETRY_BASE_DELAY * (2 ** attempt)))
+                        logger.warning(f"Jina CLIP 429 rate limit, waiting {retry_after:.1f}s (attempt {attempt + 1}/{JINA_MAX_RETRIES})")
+                        time.sleep(retry_after)
+                        continue
+
+                    response.raise_for_status()
+                    data = response.json()
+                    return data["data"][0]["embedding"]
+
+            logger.error("Jina CLIP max retries exceeded for image embedding")
+            return None
         except Exception as e:
             logger.error(f"Error generating image embedding via Jina: {e}", exc_info=True)
             return None

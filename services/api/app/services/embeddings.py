@@ -3,7 +3,9 @@ Embedding Service
 Generates vector embeddings using Jina AI (free tier, 768 dims)
 """
 
+import asyncio
 import logging
+import time
 import httpx
 from typing import List, Optional
 from app.core.config import settings
@@ -12,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
 JINA_MODEL = "jina-embeddings-v2-base-en"  # 768 dims, matches EMBEDDING_DIMENSION
-JINA_BATCH_SIZE = 100  # Jina supports up to 2048 inputs per request
+JINA_BATCH_SIZE = 50   # Reduced from 100 to stay under rate limits
+JINA_MAX_RETRIES = 5
+JINA_RETRY_BASE_DELAY = 2.0  # seconds
 
 
 class EmbeddingService:
@@ -55,39 +59,64 @@ class EmbeddingService:
                 all_embeddings.extend(batch_result)
                 continue
 
-            try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
-                        JINA_EMBED_URL,
-                        headers={
-                            "Authorization": f"Bearer {self.api_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": JINA_MODEL,
-                            "input": [t for _, t in indexed],
-                        },
+            for attempt in range(JINA_MAX_RETRIES):
+                try:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        response = await client.post(
+                            JINA_EMBED_URL,
+                            headers={
+                                "Authorization": f"Bearer {self.api_key}",
+                                "Content-Type": "application/json",
+                            },
+                            json={
+                                "model": JINA_MODEL,
+                                "input": [t for _, t in indexed],
+                            },
+                        )
+
+                        if response.status_code == 429:
+                            retry_after = float(response.headers.get("Retry-After", JINA_RETRY_BASE_DELAY * (2 ** attempt)))
+                            logger.warning(
+                                f"Jina rate limit (429) on batch {i // batch_size + 1}, "
+                                f"attempt {attempt + 1}/{JINA_MAX_RETRIES}. "
+                                f"Waiting {retry_after:.1f}s..."
+                            )
+                            await asyncio.sleep(retry_after)
+                            continue
+
+                        response.raise_for_status()
+                        data = response.json()
+
+                    for result_idx, (orig_idx, _) in enumerate(indexed):
+                        embedding = data.get("data", [{}])[result_idx].get("embedding")
+                        batch_result[orig_idx] = embedding
+
+                    logger.info(
+                        f"Jina batch {i // batch_size + 1}: embedded "
+                        f"{len(indexed)} texts ({i + len(batch)}/{len(texts)} total)"
                     )
-                    response.raise_for_status()
-                    data = response.json()
+                    break  # success
 
-                for result_idx, (orig_idx, _) in enumerate(indexed):
-                    embedding = data.get("data", [{}])[result_idx].get("embedding")
-                    batch_result[orig_idx] = embedding
-
-                logger.info(
-                    f"Jina batch {i // batch_size + 1}: embedded "
-                    f"{len(indexed)} texts ({i + len(batch)}/{len(texts)} total)"
-                )
-
-            except httpx.TimeoutException:
-                logger.error(f"Timeout on Jina batch {i // batch_size + 1}")
-            except httpx.HTTPError as e:
-                logger.error(f"HTTP error on Jina batch {i // batch_size + 1}: {e}")
-            except Exception as e:
-                logger.error(f"Unexpected error on Jina batch: {e}", exc_info=True)
+                except httpx.TimeoutException:
+                    logger.error(f"Timeout on Jina batch {i // batch_size + 1}, attempt {attempt + 1}")
+                    if attempt < JINA_MAX_RETRIES - 1:
+                        await asyncio.sleep(JINA_RETRY_BASE_DELAY * (2 ** attempt))
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429:
+                        retry_after = float(e.response.headers.get("Retry-After", JINA_RETRY_BASE_DELAY * (2 ** attempt)))
+                        logger.warning(f"Jina 429 on batch, waiting {retry_after:.1f}s (attempt {attempt + 1})")
+                        await asyncio.sleep(retry_after)
+                    else:
+                        logger.error(f"HTTP {e.response.status_code} on Jina batch {i // batch_size + 1}: {e}")
+                        break
+                except Exception as e:
+                    logger.error(f"Unexpected error on Jina batch: {e}", exc_info=True)
+                    break
 
             all_embeddings.extend(batch_result)
+            # Small pause between batches to avoid triggering rate limits
+            if i + batch_size < len(texts):
+                await asyncio.sleep(0.5)
 
         return all_embeddings
 

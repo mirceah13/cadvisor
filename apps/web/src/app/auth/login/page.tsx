@@ -17,6 +17,7 @@ function LoginPageInner() {
 
   const [email, setEmail] = useState('mirceah13@yahoo.com')
   const [password, setPassword] = useState('TestPassword123!')
+  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [authError, setAuthError] = useState('')
 
@@ -29,6 +30,7 @@ function LoginPageInner() {
       const result = await signIn('credentials', {
         email,
         password,
+        remember: rememberMe ? 'true' : 'false',
         redirect: false,
         callbackUrl
       })
@@ -120,6 +122,8 @@ function LoginPageInner() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
                 className="h-4 w-4 rounded border-input text-primary focus:ring-primary/20"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-foreground">

@@ -15,7 +15,8 @@ export const authOptions: NextAuthOptions = {
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' }
+        password: { label: 'Password', type: 'password' },
+        remember: { label: 'Remember me', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -39,6 +40,7 @@ export const authOptions: NextAuthOptions = {
               refreshToken: data.refresh_token,
               organizationId: data.user.organization_id,
               role: data.user.role,
+              rememberMe: credentials.remember === 'true',
             }
           }
 
@@ -61,7 +63,19 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.role = (user as any).role
         token.organizationId = (user as any).organizationId
-        token.accessTokenExpiresAt = Date.now() + 29 * 60 * 1000 // 29 min (1 min before server expiry)
+        token.rememberMe = (user as any).rememberMe ?? true
+        token.loginAt = Date.now()
+        token.accessTokenExpiresAt = Date.now() + 29 * 60 * 1000
+      }
+
+      // For non-remembered sessions, hard-expire after 2 hours from login
+      if (!token.rememberMe) {
+        const sessionMaxMs = 2 * 60 * 60 * 1000 // 2 hours
+        if (Date.now() > ((token.loginAt as number) + sessionMaxMs)) {
+          return { ...token, error: 'SessionExpired' }
+        }
+        // Non-remembered sessions: skip refresh — let them expire naturally
+        return token
       }
 
       // Refresh access token if it is about to expire
@@ -69,7 +83,7 @@ export const authOptions: NextAuthOptions = {
         return token
       }
 
-      // Attempt silent refresh
+      // Attempt silent refresh (remembered sessions only)
       if (token.refreshToken) {
         try {
           const response = await axios.post(`${getApiUrl()}/api/v1/auth/refresh`, {
@@ -96,6 +110,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string
         session.user.organizationId = token.organizationId as string
         ;(session as any).error = token.error
+        ;(session as any).rememberMe = token.rememberMe
       }
       return session
     },
@@ -116,7 +131,7 @@ export const authOptions: NextAuthOptions = {
 
   session: {
     strategy: 'jwt',
-    maxAge: 7 * 24 * 60 * 60, // 7 days — aligned with refresh token lifetime
+    maxAge: 7 * 24 * 60 * 60, // 7 days — the JWT check above enforces 2h for non-remembered sessions
   },
 
   secret: process.env.NEXTAUTH_SECRET,

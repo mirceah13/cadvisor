@@ -38,4 +38,9 @@ celery_app.conf.update(
     broker_use_ssl=_ssl_config if _is_rediss else None,
     redis_backend_use_ssl=_ssl_config if _is_rediss else None,
     broker_connection_retry_on_startup=True,
+    # Reduce Upstash command volume:
+    # Heartbeat every 60s instead of default 2s (~30x fewer PUBLISH commands)
+    worker_heartbeat=60,
+    # Event heartbeat interval (for monitoring) — also 60s
+    worker_send_task_events=False,  # disable per-task events unless needed
 )

@@ -391,19 +391,19 @@ async def get_dashboard_health(
     except Exception as exc:
         services.append(ServiceHealth(name="AI Analysis", status="unavailable", message=str(exc)[:120]))
 
-    # 4. File Storage (MinIO) — lightweight live-check via HTTP
-    scheme = "https" if settings.MINIO_USE_SSL else "http"
-    minio_health_url = f"{scheme}://{settings.MINIO_ENDPOINT}/minio/health/live"
+    # 4. File Storage — S3-compatible check (works with MinIO and Cloudflare R2)
     try:
+        import asyncio
+        from app.services.storage import StorageService
         t0 = _time.monotonic()
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(minio_health_url)
+        storage = await asyncio.get_event_loop().run_in_executor(None, StorageService)
+        exists = await asyncio.get_event_loop().run_in_executor(
+            None, storage.client.bucket_exists, storage.bucket_name
+        )
         latency = round((_time.monotonic() - t0) * 1000, 1)
-        svc_status = "healthy" if resp.status_code == 200 else "degraded"
-        msg = None if resp.status_code == 200 else f"HTTP {resp.status_code}"
+        svc_status = "healthy" if exists else "degraded"
+        msg = None if exists else "Bucket not found"
         services.append(ServiceHealth(name="File Storage", status=svc_status, latency_ms=latency, message=msg))
-    except httpx.TimeoutException:
-        services.append(ServiceHealth(name="File Storage", status="degraded", message="Timeout"))
     except Exception as exc:
         services.append(ServiceHealth(name="File Storage", status="unavailable", message=str(exc)[:120]))
 

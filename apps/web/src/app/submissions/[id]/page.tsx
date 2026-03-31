@@ -176,7 +176,7 @@ export default function SubmissionDetailPage() {
   const fetchFiles = async () => {
     try {
       console.log('[Fetch] Fetching files for submission:', params.id)
-      const fetchedFiles = (await apiClient.get<any[]>(`/files/?submission_id=${params.id}`)) || []
+      const fetchedFiles = (await apiClient.get<any[]>(`/files?submission_id=${params.id}`)) || []
       console.log('[Fetch] Got', fetchedFiles.length, 'files')
       setFiles(fetchedFiles)
       

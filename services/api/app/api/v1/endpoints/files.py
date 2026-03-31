@@ -398,7 +398,7 @@ def _summarize_metadata_for_list(metadata: Optional[dict]) -> Optional[dict]:
     return result or None
 
 
-@router.get("/", response_model=List[FileResponse])
+@router.get("", response_model=List[FileResponse])
 def list_files(
     submission_id: Optional[UUID] = None,
     limit: int = 100,

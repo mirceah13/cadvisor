@@ -19,7 +19,7 @@ from app.services.file import FileService
 from app.services.storage import StorageService
 from app.tasks.cad import process_cad_file
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 # Request/Response Models
 class PreSignUploadRequest(BaseModel):

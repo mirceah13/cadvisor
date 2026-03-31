@@ -383,6 +383,21 @@ def download_aps_raw_data(
     )
 
 
+def _summarize_metadata_for_list(metadata: Optional[dict]) -> Optional[dict]:
+    """Return metadata safe for list responses — strips bulk aps_raw_responses data."""
+    if not metadata:
+        return metadata
+    aps_raw = metadata.get("aps_raw_responses")
+    result = {k: v for k, v in metadata.items() if k != "aps_raw_responses"}
+    if aps_raw:
+        # Keep a lightweight summary so the UI knows raw data exists and is downloadable
+        result["aps_raw_responses"] = {
+            "available": aps_raw.get("available", False),
+            "response_count": aps_raw.get("response_count", 0),
+        }
+    return result or None
+
+
 @router.get("/", response_model=List[FileResponse])
 def list_files(
     submission_id: Optional[UUID] = None,
@@ -427,7 +442,10 @@ def list_files(
             submission_id=f.submission_id,
             status=(f.parsed_metadata or {}).get("processing_status", "pending"),  # Use processing status, not scan status
             created_at=f.created_at.isoformat(),
-            file_metadata=f.parsed_metadata
+            # Strip bulk aps_raw_responses (~3MB per file) from list responses to avoid huge payloads.
+            # A lightweight summary is kept so the UI knows raw data is downloadable.
+            # Full raw data is served by the dedicated /files/{id}/aps-raw-download endpoint.
+            file_metadata=_summarize_metadata_for_list(f.parsed_metadata)
         )
         for f in files
     ]

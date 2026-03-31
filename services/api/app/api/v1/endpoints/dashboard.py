@@ -87,7 +87,8 @@ async def get_dashboard_stats(
     
     # Project stats
     total_projects = db.query(func.count(Project.id)).filter(
-        Project.org_id == org_id
+        Project.org_id == org_id,
+        Project.is_deleted == False,
     ).scalar() or 0
     
     # Consider projects with submissions in last 30 days as "active"
@@ -96,7 +97,7 @@ async def get_dashboard_stats(
         and_(
             Submission.created_at >= thirty_days_ago,
             Submission.project_id.in_(
-                db.query(Project.id).filter(Project.org_id == org_id)
+                db.query(Project.id).filter(Project.org_id == org_id, Project.is_deleted == False)
             )
         )
     ).scalar() or 0

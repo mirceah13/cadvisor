@@ -5,7 +5,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import auth, organizations, projects, submissions, submissions_crud, files, analysis, kb, billing, feedback, reports, dashboard
 
-api_router = APIRouter()
+api_router = APIRouter(redirect_slashes=False)
 
 # Include all endpoint routers
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])

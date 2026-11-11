@@ -23,6 +23,7 @@ email-validator==2.1.0
 
 # Task Queue
 celery==5.3.6
+kombu==5.3.7  # celery 5.3.x; newer kombu needs redis-py >= 6.1 (we pin 5.0.1)
 redis==5.0.1
 
 # Storage (S3/MinIO)
